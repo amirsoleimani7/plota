@@ -15,12 +15,19 @@ public:
                       OthelloPage *page,
                       QObject *parent = nullptr);
 
+signals:
+    // MainWindow can connect to this to go back to main menu
+    void backToMenuRequested();
+
 private:
     void connectUi();
     void connectProtocol();
     void applyState(const QJsonObject &state);
 
     void handleMessage(const QString &type, const QJsonObject &payload);
+
+    void requestStateAndChat();     // helper
+    void resetLocalRoomState();     // helper
 
     ClientProtocol *m_proto = nullptr;
     OthelloPage *m_page = nullptr;

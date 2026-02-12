@@ -75,6 +75,8 @@ QJsonObject AuthService::handleLogin(QTcpSocket *socket, const QJsonObject &payl
     // ✅ socket-binding
     m_sessions.bind(socket, username);
 
+    qDebug() << "LOGIN OK bind socket to" << username;
+
     replyPayload["ok"] = true;
     replyPayload["name"] = name;
     return replyPayload;

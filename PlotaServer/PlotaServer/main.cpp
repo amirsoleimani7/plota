@@ -140,7 +140,6 @@ int main(int argc, char *argv[])
                     reply["type"] = "othello_chat_get_result";
                     replyPayload = othello.handleChatGet(clientSocket);
                 }
-
                 else {
                     reply["type"] = "error";
                     replyPayload["ok"] = false;

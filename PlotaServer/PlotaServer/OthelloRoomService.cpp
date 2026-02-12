@@ -204,7 +204,6 @@ QJsonObject OthelloRoomService::tryMove(QTcpSocket *sock, int r, int c)
 // =====================================================
 // ✅ CHAT IMPLEMENTATION (CORRECT FOR YOUR ROOM SYSTEM)
 // =====================================================
-
 static void sendMessage(QTcpSocket *sock, const QString &type, const QJsonObject &payload)
 {
     if (!sock) return;
@@ -220,15 +219,15 @@ QJsonObject OthelloRoomService::broadcastChat(QTcpSocket *sock, const QString &f
 {
     QJsonObject out;
 
-    QString roomCode = roomOf(sock);
-    if (roomCode.isEmpty()) {
+    QString code = roomOf(sock);
+    if (code.isEmpty()) {
         out["ok"] = false;
         out["error"] = "NOT_IN_ROOM";
         return out;
     }
 
-    const RoomManager::Room *r = m_rooms.getRoom(roomCode);
-    if (!r) {
+    const RoomManager::Room *room = m_rooms.getRoom(code);
+    if (!room) {
         out["ok"] = false;
         out["error"] = "ROOM_NOT_FOUND";
         return out;
@@ -236,27 +235,24 @@ QJsonObject OthelloRoomService::broadcastChat(QTcpSocket *sock, const QString &f
 
     QString ts = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
-    // store message in memory (per-room)
-    ChatMessage cm{from, text, ts};
-    auto &vec = m_chat[roomCode];
-    vec.push_back(cm);
-
+    // store last N
     const int MAX_CHAT = 50;
-    if (vec.size() > MAX_CHAT)
-        vec.remove(0, vec.size() - MAX_CHAT);
+    m_chat[code].push_back(ChatMessage{from, text, ts});
+    while (m_chat[code].size() > MAX_CHAT)
+        m_chat[code].removeFirst();
 
-    // broadcast message
+    // broadcast payload
     QJsonObject chatPayload;
-    chatPayload["room"] = roomCode;
+    chatPayload["room"] = code;
     chatPayload["from"] = from;
     chatPayload["text"] = text;
     chatPayload["ts"] = ts;
 
-    if (r->black) sendMessage(r->black, "othello_chat", chatPayload);
-    if (r->white) sendMessage(r->white, "othello_chat", chatPayload);
+    if (room->black) sendMessage(room->black, "othello_chat", chatPayload);
+    if (room->white) sendMessage(room->white, "othello_chat", chatPayload);
 
     out["ok"] = true;
-    out["room"] = roomCode;
+    out["room"] = code;
     return out;
 }
 
@@ -264,15 +260,15 @@ QJsonObject OthelloRoomService::getChat(QTcpSocket *sock) const
 {
     QJsonObject out;
 
-    QString roomCode = roomOf(sock);
-    if (roomCode.isEmpty()) {
+    QString code = roomOf(sock);
+    if (code.isEmpty()) {
         out["ok"] = false;
         out["error"] = "NOT_IN_ROOM";
         return out;
     }
 
     QJsonArray arr;
-    const auto it = m_chat.find(roomCode);
+    auto it = m_chat.find(code);
     if (it != m_chat.end()) {
         for (const ChatMessage &m : it.value()) {
             QJsonObject o;
@@ -284,7 +280,7 @@ QJsonObject OthelloRoomService::getChat(QTcpSocket *sock) const
     }
 
     out["ok"] = true;
-    out["room"] = roomCode;
+    out["room"] = code;
     out["messages"] = arr;
     return out;
 }

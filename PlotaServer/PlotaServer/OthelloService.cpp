@@ -93,12 +93,13 @@ QJsonObject OthelloService::handleMove(QTcpSocket *sock, const QJsonObject &payl
 // ===============================
 // ✅ CHAT
 // ===============================
-
 QJsonObject OthelloService::handleChatSend(QTcpSocket *sock, const QJsonObject &payload)
 {
     QJsonObject reply;
 
     QString username = m_sessions.username(sock);
+    qDebug() << "CHAT username=" << username;
+
     if (username.isEmpty()) {
         reply["ok"] = false;
         reply["error"] = "NOT_LOGGED_IN";
@@ -117,11 +118,10 @@ QJsonObject OthelloService::handleChatSend(QTcpSocket *sock, const QJsonObject &
         return reply;
     }
 
-    // Let room service broadcast + store
+    // Broadcast (and store in memory) inside room service
     return m_rooms.broadcastChat(sock, username, text);
 }
 
-// ✅ GET last chat messages of my current room
 QJsonObject OthelloService::handleChatGet(QTcpSocket *sock)
 {
     QJsonObject reply;

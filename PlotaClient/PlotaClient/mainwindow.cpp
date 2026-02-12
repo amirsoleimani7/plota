@@ -12,48 +12,22 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // 1) networking first
-    proto = new ClientProtocol(this);
-    proto->connectToHost("127.0.0.1", 45454);
-
-    // 2) then UI pages/controllers that depend on proto
-    othelloPage = new OthelloPage(this);
-    ui->stack->addWidget(othelloPage);
-
-    othelloController = new OthelloController(proto, othelloPage, this);
-
-    connect(othelloPage, &OthelloPage::backToMenuClicked, this, [this]() {
-        // optional: leave room automatically so user doesn't “stay” in a room
-        if (proto) {
-            proto->sendMessage("othello_leave_room", QJsonObject{});
-        }
-
-        ui->stack->setCurrentWidget(ui->pageMainMenu);
-    });
-
-    // Navigate when Othello button clicked
-    connect(ui->btnOthello, &QPushButton::clicked, this, [=]() {
-        ui->stack->setCurrentWidget(othelloPage);
-    });
-
-
     // ---- UI init ----
     ui->stack->setCurrentWidget(ui->pageLogin);
 
-    // Mask password fields (required)
     ui->leLoginPassword->setEchoMode(QLineEdit::Password);
     ui->leSignupPassword->setEchoMode(QLineEdit::Password);
     ui->leForgotNewPassword->setEchoMode(QLineEdit::Password);
 
-    // Connect4 placeholder
     ui->btnConnect4->setEnabled(false);
     ui->btnConnect4->setText("connect4 (coming soon)");
 
     setLoginStatus("");
     setSignupStatus("");
     setForgotStatus("");
+    setEditProfileStatus("");
 
-    // ---- Networking init ----
+    // ✅ 1) networking ONCE
     proto = new ClientProtocol(this);
 
     connect(proto, &ClientProtocol::connected, this, [=](){
@@ -81,11 +55,22 @@ MainWindow::MainWindow(QWidget *parent)
 
                 if (type == "signup_result") {
                     bool ok = payload.value("ok").toBool(false);
+                    setSignupStatus(ok ? "Signup OK. You can login now."
+                                       : "Signup failed: " + payload.value("error").toString());
+                    if (ok) ui->stack->setCurrentWidget(ui->pageLogin);
+                }
+                else if (type == "login_result") {
+                    bool ok = payload.value("ok").toBool(false);
                     if (ok) {
-                        setSignupStatus("Signup OK. You can login now.");
-                        ui->stack->setCurrentWidget(ui->pageLogin);
+                        currentUsername = ui->leLoginUsername->text().trimmed();
+                        currentName = payload.value("name").toString();
+
+                        setLoginStatus("Login OK. Welcome " + currentName);
+                        ui->stack->setCurrentWidget(ui->pageMainMenu);
+
+                        proto->sendMessage("get_profile", QJsonObject{});
                     } else {
-                        setSignupStatus("Signup failed: " + payload.value("error").toString());
+                        setLoginStatus("Login failed: " + payload.value("error").toString());
                     }
                 }
                 else if (type == "profile_result") {
@@ -104,34 +89,9 @@ MainWindow::MainWindow(QWidget *parent)
                 }
                 else if (type == "update_profile_result") {
                     bool ok = payload.value("ok").toBool(false);
-                    if (ok) {
-                        setEditProfileStatus("Profile updated successfully.");
-                        ui->leEditPassword->clear();
-                    } else {
-                        setEditProfileStatus("Update failed: " + payload.value("error").toString());
-                    }
-                }
-                else if (type == "login_result") {
-                    bool ok = payload.value("ok").toBool(false);
-                    if (ok) {
-                        currentUsername = ui->leLoginUsername->text().trimmed();
-                        currentName = payload.value("name").toString();
-
-                        setLoginStatus("Login OK. Welcome " + currentName);
-                        ui->stack->setCurrentWidget(ui->pageMainMenu);
-
-                        // Ask server for full profile
-                        proto->sendMessage("get_profile", QJsonObject{});
-
-                        // temporary prefill until profile_result arrives
-                        ui->leEditName->setText(currentName);
-                        ui->leEditUsername->setText(currentUsername);
-                        ui->leEditPhone->setText("");
-                        ui->leEditEmail->setText("");
-                        ui->leEditPassword->setText("");
-                    } else {
-                        setLoginStatus("Login failed: " + payload.value("error").toString());
-                    }
+                    setEditProfileStatus(ok ? "Profile updated successfully."
+                                            : "Update failed: " + payload.value("error").toString());
+                    if (ok) ui->leEditPassword->clear();
                 }
                 else if (type == "forgot_result") {
                     bool ok = payload.value("ok").toBool(false);
@@ -144,8 +104,22 @@ MainWindow::MainWindow(QWidget *parent)
                 }
             });
 
-    // connect to localhost for now (later: user enters IP/port)
+    // ✅ connect ONCE
     proto->connectToHost("127.0.0.1", 45454);
+
+    // ✅ 2) Othello page/controller AFTER proto exists
+    othelloPage = new OthelloPage(this);
+    ui->stack->addWidget(othelloPage);
+    othelloController = new OthelloController(proto, othelloPage, this);
+
+    connect(othelloPage, &OthelloPage::backToMenuClicked, this, [this]() {
+        if (proto) proto->sendMessage("othello_leave_room", QJsonObject{});
+        ui->stack->setCurrentWidget(ui->pageMainMenu);
+    });
+
+    connect(ui->btnOthello, &QPushButton::clicked, this, [=](){
+        ui->stack->setCurrentWidget(othelloPage);
+    });
 
     // ---- Navigation buttons ----
     connect(ui->btnGoSignup, &QPushButton::clicked, this, [=](){
@@ -181,7 +155,6 @@ MainWindow::MainWindow(QWidget *parent)
         p["phone"] = ui->leSignupPhone->text().trimmed();
         p["email"] = ui->leSignupEmail->text().trimmed();
         p["password"] = ui->leSignupPassword->text();
-
         proto->sendMessage("signup", p);
     });
 
@@ -189,7 +162,6 @@ MainWindow::MainWindow(QWidget *parent)
         QJsonObject p;
         p["username"] = ui->leLoginUsername->text().trimmed();
         p["password"] = ui->leLoginPassword->text();
-
         proto->sendMessage("login", p);
     });
 
@@ -198,14 +170,7 @@ MainWindow::MainWindow(QWidget *parent)
         p["username"] = ui->leForgotUsername->text().trimmed();
         p["phone"] = ui->leForgotPhone->text().trimmed();
         p["newPassword"] = ui->leForgotNewPassword->text();
-
         proto->sendMessage("forgot_password", p);
-    });
-
-    // Menu buttons (placeholders for now)
-    connect(ui->btnOthello, &QPushButton::clicked, this, [=](){
-        // Next: go to Othello hub / room screen
-        qDebug() << "Othello clicked";
     });
 
     connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
@@ -222,13 +187,11 @@ MainWindow::MainWindow(QWidget *parent)
             setEditProfileStatus("Not logged in.");
             return;
         }
-
         QJsonObject p;
         p["newName"] = ui->leEditName->text().trimmed();
         p["newPhone"] = ui->leEditPhone->text().trimmed();
         p["newEmail"] = ui->leEditEmail->text().trimmed();
         p["newPassword"] = ui->leEditPassword->text();
-
         proto->sendMessage("update_profile", p);
     });
 }

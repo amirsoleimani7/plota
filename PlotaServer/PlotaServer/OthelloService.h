@@ -12,7 +12,6 @@ class OthelloService
 public:
     explicit OthelloService(OthelloRoomService &rooms, SessionManager &sessions);
 
-    // Messages
     QJsonObject handleCreateRoom(QTcpSocket *sock);
     QJsonObject handleJoinRoom(QTcpSocket *sock, const QJsonObject &payload);
     QJsonObject handleLeaveRoom(QTcpSocket *sock);
@@ -23,7 +22,6 @@ public:
     QJsonObject handleChatSend(QTcpSocket *sock, const QJsonObject &payload);
     QJsonObject handleChatGet(QTcpSocket *sock);
 
-    // Called by main.cpp on disconnect
     void handleDisconnect(QTcpSocket *sock);
 
 private:
