@@ -206,9 +206,11 @@ MainWindow::MainWindow(QWidget *parent)
         setEditProfileStatus("");
         ui->stack->setCurrentWidget(ui->pageEditProfile);
     });
+
     connect(ui->btnBackToMainMenu, &QPushButton::clicked, this, [=](){
         ui->stack->setCurrentWidget(ui->pageMainMenu);
     });
+
     connect(ui->btnSaveProfile, &QPushButton::clicked, this, [=](){
         if (currentUsername.isEmpty()) {
             setEditProfileStatus("Not logged in.");
