@@ -13,6 +13,9 @@
 #include "Database.h"
 #include "SessionManager.h"
 #include "AuthService.h"
+#include "RoomManager.h"
+#include "OthelloRoomService.h"
+#include "OthelloService.h"
 
 
 int main(int argc, char *argv[])
@@ -28,6 +31,33 @@ int main(int argc, char *argv[])
     QTcpServer server;
     SessionManager sessions;
     AuthService auth(db, sessions);
+    RoomManager roomMgr;
+    OthelloRoomService othelloRooms(roomMgr);
+    OthelloService othello(othelloRooms);
+
+    QObject::connect(&othelloRooms, &OthelloRoomService::roomStateChanged,
+                     [&](const QString &code, const QJsonObject &state) {
+                         Q_UNUSED(code);
+
+                         // Send to both sockets in that room (if connected)
+                         const RoomManager::Room *r = roomMgr.getRoom(state.value("room").toString());
+                         if (!r) return;
+
+                         auto sendTo = [&](QTcpSocket *s) {
+                             if (!s) return;
+                             QJsonObject msg;
+                             msg["type"] = "othello_state";
+                             msg["payload"] = state;
+
+                             QByteArray out = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+                             out.append('\n');
+                             s->write(out);
+                         };
+
+                         sendTo(r->black);
+                         sendTo(r->white);
+                     });
+
 
     QObject::connect(&server, &QTcpServer::newConnection, [&]() {
         QTcpSocket *clientSocket = server.nextPendingConnection();
@@ -35,7 +65,7 @@ int main(int argc, char *argv[])
         qDebug() << "Client connected from:"
                  << clientSocket->peerAddress().toString();
 
-        QObject::connect(clientSocket, &QTcpSocket::readyRead, [&auth, clientSocket]() {
+        QObject::connect(clientSocket, &QTcpSocket::readyRead, [&auth, &othello, clientSocket]() {
             while (clientSocket->canReadLine()) {
                 QByteArray line = clientSocket->readLine().trimmed();
 
@@ -82,6 +112,27 @@ int main(int argc, char *argv[])
                     reply["type"] = "forgot_result";
                     replyPayload = auth.handleForgotPassword(payload);
                 }
+                else if (type == "othello_create_room") {
+                    reply["type"] = "othello_create_room_result";
+                    replyPayload = othello.handleCreateRoom(clientSocket);
+                }
+                else if (type == "othello_join_room") {
+                    reply["type"] = "othello_join_room_result";
+                    replyPayload = othello.handleJoinRoom(clientSocket, payload);
+                }
+                else if (type == "othello_move") {
+                    reply["type"] = "othello_move_result";
+                    replyPayload = othello.handleMove(clientSocket, payload);
+                }
+                else if (type == "othello_leave_room") {
+                    reply["type"] = "othello_leave_room_result";
+                    replyPayload = othello.handleLeaveRoom(clientSocket);
+                }
+                else if (type == "othello_get_state") {
+                    reply["type"] = "othello_state_result";
+                    replyPayload = othello.handleGetState(clientSocket);
+                }
+
                 else {
                     reply["type"] = "error";
                     replyPayload["ok"] = false;
@@ -96,10 +147,11 @@ int main(int argc, char *argv[])
             }
         });
 
-        QObject::connect(clientSocket, &QTcpSocket::disconnected, [&sessions, clientSocket]() {
-            qDebug() << "Client disconnected";
-            sessions.unbind(clientSocket);
-            clientSocket->deleteLater();
+        QObject::connect(clientSocket, &QTcpSocket::disconnected, [&sessions, &othello, clientSocket]() {
+                             qDebug() << "Client disconnected";
+                             othello.handleDisconnect(clientSocket);   // leaves room if needed
+                             sessions.unbind(clientSocket);
+                             clientSocket->deleteLater();
         });
     });
 

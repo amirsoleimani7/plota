@@ -28,6 +28,10 @@ add_executable(PlotaServer
   OthelloLogic.cpp
   RoomManager.h
   RoomManager.cpp
+  OthelloRoomService.h
+  OthelloRoomService.cpp
+  OthelloService.h
+  OthelloService.cpp
 )
 
 target_link_libraries(PlotaServer PRIVATE
