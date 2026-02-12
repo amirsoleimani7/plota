@@ -67,15 +67,26 @@ MainWindow::MainWindow(QWidget *parent)
                     setSignupStatus("Signup failed: " + payload.value("error").toString());
                 }
             }
+            else if (type == "profile_result") {
+                bool ok = payload.value("ok").toBool(false);
+                if (!ok) {
+                    setEditProfileStatus("Profile load failed: " + payload.value("error").toString());
+                } else {
+                    ui->leEditName->setText(payload.value("name").toString());
+                    ui->leEditUsername->setText(payload.value("username").toString());
+                    ui->leEditPhone->setText(payload.value("phone").toString());
+                    ui->leEditEmail->setText(payload.value("email").toString());
+
+                    // keep local state consistent
+                    currentUsername = payload.value("username").toString();
+                    currentName = payload.value("name").toString();
+                }
+            }
+
 
             else if (type == "update_profile_result") {
                 bool ok = payload.value("ok").toBool(false);
                 if (ok) {
-                    // If username changed, update our local "currentUsername"
-                    QString newUsername = payload.value("username").toString();
-                    if (!newUsername.isEmpty())
-                        currentUsername = newUsername;
-
                     setEditProfileStatus("Profile updated successfully.");
                 } else {
                     setEditProfileStatus("Update failed: " + payload.value("error").toString());
@@ -89,7 +100,14 @@ MainWindow::MainWindow(QWidget *parent)
                     currentName = payload.value("name").toString();
 
                     setLoginStatus("Login OK. Welcome " + currentName);
+
                     ui->stack->setCurrentWidget(ui->pageMainMenu);
+                    // Ask server for full profile (name/username/phone/email)
+                    QJsonObject req;
+                    req["type"] = "get_profile";
+                    req["payload"] = QJsonObject{};
+                    sendJson(req);
+
 
                     // prefill edit profile fields (for now with what we have)
                     ui->leEditName->setText(currentName);
@@ -152,7 +170,7 @@ MainWindow::MainWindow(QWidget *parent)
         p["username"] = ui->leSignupUsername->text().trimmed();
         p["phone"] = ui->leSignupPhone->text().trimmed();
         p["email"] = ui->leSignupEmail->text().trimmed();
-        p["passwordHash"] = ui->leSignupPassword->text(); // TEMP (we’ll hash later)
+        p["password"] = ui->leSignupPassword->text();
         msg["payload"] = p;
         sendJson(msg);
     });
@@ -162,7 +180,7 @@ MainWindow::MainWindow(QWidget *parent)
         msg["type"] = "login";
         QJsonObject p;
         p["username"] = ui->leLoginUsername->text().trimmed();
-        p["passwordHash"] = ui->leLoginPassword->text(); // TEMP (we’ll hash later)
+        p["password"] = ui->leLoginPassword->text();
         msg["payload"] = p;
         sendJson(msg);
     });
@@ -173,7 +191,7 @@ MainWindow::MainWindow(QWidget *parent)
         QJsonObject p;
         p["username"] = ui->leForgotUsername->text().trimmed();
         p["phone"] = ui->leForgotPhone->text().trimmed();
-        p["newPasswordHash"] = ui->leForgotNewPassword->text(); // TEMP (we’ll hash later)
+        p["newPassword"] = ui->leForgotNewPassword->text();
         msg["payload"] = p;
         sendJson(msg);
     });
@@ -182,10 +200,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnOthello, &QPushButton::clicked, this, [=](){
         // Next: go to Othello hub / room screen
         qDebug() << "Othello clicked";
-    });
-
-    connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
-        qDebug() << "Edit profile clicked (coming next)";
     });
 
     connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
@@ -205,12 +219,10 @@ MainWindow::MainWindow(QWidget *parent)
         msg["type"] = "update_profile";
 
         QJsonObject p;
-        p["currentUsername"] = currentUsername; // identity
         p["newName"] = ui->leEditName->text().trimmed();
-        p["newUsername"] = ui->leEditUsername->text().trimmed();
         p["newPhone"] = ui->leEditPhone->text().trimmed();
         p["newEmail"] = ui->leEditEmail->text().trimmed();
-        p["newPasswordHash"] = ui->leEditPassword->text(); // TEMP (hash later)
+        p["newPassword"] = ui->leEditPassword->text(); // optional; empty = no change
         msg["payload"] = p;
 
         sendJson(msg);
