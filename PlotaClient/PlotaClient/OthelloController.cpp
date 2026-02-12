@@ -72,7 +72,6 @@ void OthelloController::handleMessage(const QString &type,
         m_page->setStatus("Room created. Waiting for opponent...");
 
         m_page->setInRoom(true);
-
         // ask for state immediately (optional; server also broadcasts)
         m_proto->sendMessage("othello_get_state", QJsonObject{});
 
@@ -118,13 +117,14 @@ void OthelloController::handleMessage(const QString &type,
     }
 
     else if (type == "othello_state_result") {
-        if (!payload.value("ok").toBool()) {
+        if (!payload.value("ok").toBool(false)) {
             m_page->setStatus("State load failed: " + payload.value("error").toString());
             return;
         }
         QJsonObject state = payload.value("state").toObject();
         applyState(state);
     }
+
 }
 
 void OthelloController::applyState(const QJsonObject &state)
