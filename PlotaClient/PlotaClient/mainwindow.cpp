@@ -1,65 +1,44 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+
+#include <QJsonDocument>
 #include <QJsonParseError>
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    // ---- UI init ----
     ui->stack->setCurrentWidget(ui->pageLogin);
-    connect(ui->btnGoSignup, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageSignup);
-    });
 
-    connect(ui->btnBackToLogin, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageLogin);
-    });
+    // Mask password fields (required)
+    ui->leLoginPassword->setEchoMode(QLineEdit::Password);
+    ui->leSignupPassword->setEchoMode(QLineEdit::Password);
+    ui->leForgotNewPassword->setEchoMode(QLineEdit::Password);
 
-    connect(ui->btnForgot, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageForgot);
-    });
+    // Connect4 placeholder
+    ui->btnConnect4->setEnabled(false);
+    ui->btnConnect4->setText("connect4 (coming soon)");
 
-    connect(ui->btnBackToLoginFromForgot, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageLogin);
-    });
+    setLoginStatus("");
+    setSignupStatus("");
+    setForgotStatus("");
 
-    connect(ui->btnLogout, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageLogin);
-    });
-
+    // ---- Networking init ----
     socket = new QTcpSocket(this);
 
     connect(socket, &QTcpSocket::connected, this, [=](){
         qDebug() << "Connected to server!";
-
-        // 1) signup
-        QJsonObject signup;
-        signup["type"] = "signup";
-        QJsonObject sp;
-        sp["name"] = "Alice";
-        sp["username"] = "alice";
-        sp["phone"] = "09120000000";
-        sp["email"] = "alice@example.com";
-        sp["passwordHash"] = "TEMP_HASH_123"; // we will hash properly later
-        signup["payload"] = sp;
-        sendJson(signup);
-
-        QJsonObject signup2 = signup;
-        sendJson(signup2);
-
-
-        // 2) login
-        QJsonObject login;
-        login["type"] = "login";
-        QJsonObject lp;
-        lp["username"] = "alice";
-        lp["passwordHash"] = "TEMP_HASH_123";
-        login["payload"] = lp;
-        sendJson(login);
-
+        setLoginStatus("Connected.");
     });
 
+    connect(socket, &QTcpSocket::disconnected, this, [=](){
+        qDebug() << "Disconnected from server!";
+        setLoginStatus("Disconnected.");
+    });
 
     connect(socket, &QTcpSocket::readyRead, this, [=](){
         while (socket->canReadLine()) {
@@ -77,11 +56,111 @@ MainWindow::MainWindow(QWidget *parent)
             QJsonObject payload = msg.value("payload").toObject();
 
             qDebug() << "Reply type =" << type << "payload =" << payload;
+
+            // ---- handle replies ----
+            if (type == "signup_result") {
+                bool ok = payload.value("ok").toBool(false);
+                if (ok) {
+                    setSignupStatus("Signup OK. You can login now.");
+                    ui->stack->setCurrentWidget(ui->pageLogin);
+                } else {
+                    setSignupStatus("Signup failed: " + payload.value("error").toString());
+                }
+            }
+            else if (type == "login_result") {
+                bool ok = payload.value("ok").toBool(false);
+                if (ok) {
+                    setLoginStatus("Login OK. Welcome " + payload.value("name").toString());
+                    ui->stack->setCurrentWidget(ui->pageMainMenu);
+                } else {
+                    setLoginStatus("Login failed: " + payload.value("error").toString());
+                }
+            }
+            else if (type == "forgot_result") {
+                bool ok = payload.value("ok").toBool(false);
+                if (ok) {
+                    setForgotStatus("Password updated. Login now.");
+                    ui->stack->setCurrentWidget(ui->pageLogin);
+                } else {
+                    setForgotStatus("Reset failed: " + payload.value("error").toString());
+                }
+            }
         }
     });
 
+    // connect to localhost for now (later: user enters IP/port)
     socket->connectToHost("127.0.0.1", 45454);
 
+    // ---- Navigation buttons ----
+    connect(ui->btnGoSignup, &QPushButton::clicked, this, [=](){
+        setSignupStatus("");
+        ui->stack->setCurrentWidget(ui->pageSignup);
+    });
+
+    connect(ui->btnBackToLogin, &QPushButton::clicked, this, [=](){
+        setLoginStatus("");
+        ui->stack->setCurrentWidget(ui->pageLogin);
+    });
+
+    connect(ui->btnForgot, &QPushButton::clicked, this, [=](){
+        setForgotStatus("");
+        ui->stack->setCurrentWidget(ui->pageForgot);
+    });
+
+    connect(ui->btnBackToLoginFromForgot, &QPushButton::clicked, this, [=](){
+        setLoginStatus("");
+        ui->stack->setCurrentWidget(ui->pageLogin);
+    });
+
+    connect(ui->btnLogout, &QPushButton::clicked, this, [=](){
+        setLoginStatus("Logged out.");
+        ui->stack->setCurrentWidget(ui->pageLogin);
+    });
+
+    // ---- Actions: Signup/Login/Forgot ----
+    connect(ui->btnSignup, &QPushButton::clicked, this, [=](){
+        QJsonObject msg;
+        msg["type"] = "signup";
+        QJsonObject p;
+        p["name"] = ui->leSignupName->text().trimmed();
+        p["username"] = ui->leSignupUsername->text().trimmed();
+        p["phone"] = ui->leSignupPhone->text().trimmed();
+        p["email"] = ui->leSignupEmail->text().trimmed();
+        p["passwordHash"] = ui->leSignupPassword->text(); // TEMP (we’ll hash later)
+        msg["payload"] = p;
+        sendJson(msg);
+    });
+
+    connect(ui->btnLogin, &QPushButton::clicked, this, [=](){
+        QJsonObject msg;
+        msg["type"] = "login";
+        QJsonObject p;
+        p["username"] = ui->leLoginUsername->text().trimmed();
+        p["passwordHash"] = ui->leLoginPassword->text(); // TEMP (we’ll hash later)
+        msg["payload"] = p;
+        sendJson(msg);
+    });
+
+    connect(ui->btnResetPassword, &QPushButton::clicked, this, [=](){
+        QJsonObject msg;
+        msg["type"] = "forgot_password";
+        QJsonObject p;
+        p["username"] = ui->leForgotUsername->text().trimmed();
+        p["phone"] = ui->leForgotPhone->text().trimmed();
+        p["newPasswordHash"] = ui->leForgotNewPassword->text(); // TEMP (we’ll hash later)
+        msg["payload"] = p;
+        sendJson(msg);
+    });
+
+    // Menu buttons (placeholders for now)
+    connect(ui->btnOthello, &QPushButton::clicked, this, [=](){
+        // Next: go to Othello hub / room screen
+        qDebug() << "Othello clicked";
+    });
+
+    connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
+        qDebug() << "Edit profile clicked (coming next)";
+    });
 }
 
 MainWindow::~MainWindow()
@@ -89,19 +168,30 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-
-
-// helper function for sending the data
 void MainWindow::sendJson(const QJsonObject &obj)
 {
+    if (!socket || socket->state() != QAbstractSocket::ConnectedState) {
+        qDebug() << "Not connected, cannot send.";
+        return;
+    }
+
     QJsonDocument doc(obj);
     QByteArray data = doc.toJson(QJsonDocument::Compact);
-    data.append('\n'); // newline-delimited JSON
+    data.append('\n');
     socket->write(data);
 }
 
+void MainWindow::setLoginStatus(const QString &msg)
+{
+    ui->lblLoginStatus->setText(msg);
+}
 
-// navigation
+void MainWindow::setSignupStatus(const QString &msg)
+{
+    ui->lblSignupStatus->setText(msg);
+}
 
-
-
+void MainWindow::setForgotStatus(const QString &msg)
+{
+    ui->lblForgotStatus->setText(msg);
+}

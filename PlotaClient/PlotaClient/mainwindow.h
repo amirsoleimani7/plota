@@ -27,5 +27,10 @@ private:
     QTcpSocket *socket;
     void sendJson(const QJsonObject &obj);
 
+    void setLoginStatus(const QString &msg);
+    void setSignupStatus(const QString &msg);
+    void setForgotStatus(const QString &msg);
+
+
 };
 #endif // MAINWINDOW_H

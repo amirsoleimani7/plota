@@ -114,6 +114,27 @@ int main(int argc, char *argv[])
                         replyPayload["name"] = users[username].name;
                     }
                 }
+                else if (type == "forgot_password") {
+                    reply["type"] = "forgot_result";
+
+                    QString username = payload.value("username").toString().trimmed();
+                    QString phone    = payload.value("phone").toString().trimmed();
+                    QString newHash  = payload.value("newPasswordHash").toString();
+
+                    if (!users.contains(username)) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "NO_SUCH_USER";
+                    }
+                    else if (users[username].phone != phone) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "PHONE_MISMATCH";
+                    }
+                    else {
+                        users[username].passwordHash = newHash;
+                        replyPayload["ok"] = true;
+                    }
+                }
+
 
                 else {
                     reply["type"] = "error";
