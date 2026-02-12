@@ -1,18 +1,36 @@
 #include <QCoreApplication>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QDebug>
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    // Set up code that uses the Qt event loop here.
-    // Call a.quit() or a.exit() to quit the application.
-    // A not very useful example would be including
-    // #include <QTimer>
-    // near the top of the file and calling
-    // QTimer::singleShot(5000, &a, &QCoreApplication::quit);
-    // which quits the application after 5 seconds.
+    QTcpServer server;
 
-    // If you do not need a running Qt event loop, remove the call
-    // to a.exec() or use the Non-Qt Plain C++ Application template.
+    QObject::connect(&server, &QTcpServer::newConnection, [&]() {
+        QTcpSocket *clientSocket = server.nextPendingConnection();
+        qDebug() << "Client connected from:"
+                 << clientSocket->peerAddress().toString();
+
+        QObject::connect(clientSocket, &QTcpSocket::readyRead, [=]() {
+            QByteArray data = clientSocket->readAll();
+            qDebug() << "Received from client:" << data;
+        });
+
+        QObject::connect(clientSocket, &QTcpSocket::disconnected, [=]() {
+            qDebug() << "Client disconnected";
+            clientSocket->deleteLater();
+        });
+    });
+
+    if (!server.listen(QHostAddress::Any, 45454)) {
+        qDebug() << "Server failed to start!";
+        return -1;
+    }
+
+    qDebug() << "Server listening on port 45454...";
+
     return a.exec();
 }
