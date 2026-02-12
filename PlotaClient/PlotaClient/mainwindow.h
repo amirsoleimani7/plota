@@ -8,6 +8,9 @@
 
 #include "ClientProtocol.h"
 
+class OthelloPage;
+class OthelloController;
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
@@ -31,6 +34,9 @@ private:
 
     Ui::MainWindow *ui;
     ClientProtocol *proto = nullptr;
+    OthelloPage *othelloPage = nullptr;
+    OthelloController *othelloController = nullptr;
+
 
     void setLoginStatus(const QString &msg);
     void setSignupStatus(const QString &msg);

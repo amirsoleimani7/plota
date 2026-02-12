@@ -25,6 +25,12 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         ClientProtocol.h
         ClientProtocol.cpp
+        OthelloPage.h
+        OthelloPage.cpp
+        OthelloController.h
+        OthelloController.cpp
+        OthelloBoardWidget.h
+        OthelloBoardWidget.cpp
 
 
 

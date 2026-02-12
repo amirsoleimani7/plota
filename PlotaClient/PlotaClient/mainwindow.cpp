@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "OthelloPage.h"
+#include "OthelloController.h"
 
 #include <QLineEdit>
 #include <QDebug>
@@ -9,6 +11,22 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    // 1) networking first
+    proto = new ClientProtocol(this);
+    proto->connectToHost("127.0.0.1", 45454);
+
+    // 2) then UI pages/controllers that depend on proto
+    othelloPage = new OthelloPage(this);
+    ui->stack->addWidget(othelloPage);
+
+    othelloController = new OthelloController(proto, othelloPage, this);
+
+    // Navigate when Othello button clicked
+    connect(ui->btnOthello, &QPushButton::clicked, this, [=]() {
+        ui->stack->setCurrentWidget(othelloPage);
+    });
+
 
     // ---- UI init ----
     ui->stack->setCurrentWidget(ui->pageLogin);
