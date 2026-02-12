@@ -67,12 +67,38 @@ MainWindow::MainWindow(QWidget *parent)
                     setSignupStatus("Signup failed: " + payload.value("error").toString());
                 }
             }
+
+            else if (type == "update_profile_result") {
+                bool ok = payload.value("ok").toBool(false);
+                if (ok) {
+                    // If username changed, update our local "currentUsername"
+                    QString newUsername = payload.value("username").toString();
+                    if (!newUsername.isEmpty())
+                        currentUsername = newUsername;
+
+                    setEditProfileStatus("Profile updated successfully.");
+                } else {
+                    setEditProfileStatus("Update failed: " + payload.value("error").toString());
+                }
+            }
+
             else if (type == "login_result") {
                 bool ok = payload.value("ok").toBool(false);
                 if (ok) {
-                    setLoginStatus("Login OK. Welcome " + payload.value("name").toString());
+                    currentUsername = ui->leLoginUsername->text().trimmed();
+                    currentName = payload.value("name").toString();
+
+                    setLoginStatus("Login OK. Welcome " + currentName);
                     ui->stack->setCurrentWidget(ui->pageMainMenu);
-                } else {
+
+                    // prefill edit profile fields (for now with what we have)
+                    ui->leEditName->setText(currentName);
+                    ui->leEditUsername->setText(currentUsername);
+                    ui->leEditPhone->setText("");   // we’ll fill these properly after we add profile_fetch (optional)
+                    ui->leEditEmail->setText("");
+                    ui->leEditPassword->setText("");
+                }
+                else {
                     setLoginStatus("Login failed: " + payload.value("error").toString());
                 }
             }
@@ -161,6 +187,35 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
         qDebug() << "Edit profile clicked (coming next)";
     });
+
+    connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
+        setEditProfileStatus("");
+        ui->stack->setCurrentWidget(ui->pageEditProfile);
+    });
+    connect(ui->btnBackToMainMenu, &QPushButton::clicked, this, [=](){
+        ui->stack->setCurrentWidget(ui->pageMainMenu);
+    });
+    connect(ui->btnSaveProfile, &QPushButton::clicked, this, [=](){
+        if (currentUsername.isEmpty()) {
+            setEditProfileStatus("Not logged in.");
+            return;
+        }
+
+        QJsonObject msg;
+        msg["type"] = "update_profile";
+
+        QJsonObject p;
+        p["currentUsername"] = currentUsername; // identity
+        p["newName"] = ui->leEditName->text().trimmed();
+        p["newUsername"] = ui->leEditUsername->text().trimmed();
+        p["newPhone"] = ui->leEditPhone->text().trimmed();
+        p["newEmail"] = ui->leEditEmail->text().trimmed();
+        p["newPasswordHash"] = ui->leEditPassword->text(); // TEMP (hash later)
+        msg["payload"] = p;
+
+        sendJson(msg);
+    });
+
 }
 
 MainWindow::~MainWindow()
@@ -194,4 +249,10 @@ void MainWindow::setSignupStatus(const QString &msg)
 void MainWindow::setForgotStatus(const QString &msg)
 {
     ui->lblForgotStatus->setText(msg);
+}
+
+
+void MainWindow::setEditProfileStatus(const QString &msg)
+{
+    ui->lblEditProfileStatus->setText(msg);
 }

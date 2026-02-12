@@ -23,6 +23,12 @@ public:
     ~MainWindow();
 
 private:
+
+    QString currentUsername;   // who is logged in
+    QString currentName;
+    void setEditProfileStatus(const QString &msg);
+
+
     Ui::MainWindow *ui;    
     QTcpSocket *socket;
     void sendJson(const QJsonObject &obj);
