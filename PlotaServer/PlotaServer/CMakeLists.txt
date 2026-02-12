@@ -14,6 +14,12 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Network Sql)
 
 add_executable(PlotaServer
   main.cpp
+  Validators.h
+  Validators.cpp
+  PasswordHasher.h
+  PasswordHasher.cpp
+  Database.h
+  Database.cpp
 )
 
 target_link_libraries(PlotaServer PRIVATE

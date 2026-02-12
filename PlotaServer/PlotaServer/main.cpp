@@ -4,6 +4,10 @@
 #include <QDebug>
 #include <QHostAddress>
 
+#include "Validators.h"
+#include "PasswordHasher.h"
+#include "Database.h"
+
 // hashing
 #include <QHash>
 #include <QRegularExpression>
@@ -21,135 +25,12 @@
 #include <QSqlError>
 #include <QFileInfo>
 
-// validation for signup
-static bool isValidUsername(const QString &u) {
-    // 3..20 chars, letters/digits/underscore, must start with letter
-    static QRegularExpression re(R"(^[A-Za-z][A-Za-z0-9_]{2,19}$)");
-    return re.match(u).hasMatch();
-}
-
-static bool isValidEmail(const QString &email) {
-    static QRegularExpression re(R"(^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$)");
-    return re.match(email).hasMatch();
-}
-
-static bool isValidPhone(const QString &phone) {
-    // digits only, length 10..15 (simple + practical)
-    static QRegularExpression re(R"(^\d{10,15}$)");
-    return re.match(phone).hasMatch();
-}
-
-static bool isStrongPasswordPlain(const QString &pw) {
-    if (pw.size() < 8) return false; // required by spec
-    bool hasUpper=false, hasLower=false, hasDigit=false, hasSpecial=false;
-    for (QChar c : pw) {
-        if (c.isUpper()) hasUpper = true;
-        else if (c.isLower()) hasLower = true;
-        else if (c.isDigit()) hasDigit = true;
-        else hasSpecial = true;
-    }
-    return hasUpper && hasLower && hasDigit && hasSpecial;
-}
-
-static bool looksLikeSha256Hex(const QString &s) {
-    static QRegularExpression re(R"(^[0-9a-fA-F]{64}$)");
-    return re.match(s).hasMatch();
-}
-
-
-static bool isStrongPassword(const QString &pw) {
-    if (pw.size() < 8) return false; // required
-    bool hasUpper=false, hasLower=false, hasDigit=false, hasSpecial=false;
-    for (QChar c : pw) {
-        if (c.isUpper()) hasUpper = true;
-        else if (c.isLower()) hasLower = true;
-        else if (c.isDigit()) hasDigit = true;
-        else hasSpecial = true;
-    }
-    return hasUpper && hasLower && hasDigit && hasSpecial;
-}
-
-
-// salt hash
-static QString makeSalt() {
-    return QUuid::createUuid().toString(QUuid::WithoutBraces);
-}
-
-static QString hashPassword(const QString &salt, const QString &password) {
-    QByteArray in = (salt + password).toUtf8();
-    QByteArray out = QCryptographicHash::hash(in, QCryptographicHash::Sha256);
-    return QString::fromUtf8(out.toHex());
-}
-
-
-static bool columnExists(QSqlDatabase &db, const QString &table, const QString &column)
-{
-    QSqlQuery q(db);
-    q.prepare("PRAGMA table_info(" + table + ");");
-    if (!q.exec()) return false;
-
-    while (q.next()) {
-        // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
-        if (q.value(1).toString().compare(column, Qt::CaseInsensitive) == 0)
-            return true;
-    }
-    return false;
-}
-
-static QSqlDatabase initDatabase()
-{
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
-
-    QString dbPath = QCoreApplication::applicationDirPath() + "/plota.db";
-    db.setDatabaseName(dbPath);
-
-    if (!db.open()) {
-        qDebug() << "DB open failed:" << db.lastError().text();
-        return db;
-    }
-
-    QSqlQuery q(db);
-
-    // Create table with salt included (fresh DB)
-    if (!q.exec(R"SQL(
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
-            phone TEXT NOT NULL,
-            email TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            salt TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-    )SQL")) {
-        qDebug() << "Create users table failed:" << q.lastError().text();
-    }
-
-    // Migration for old DBs without salt
-    if (!columnExists(db, "users", "salt")) {
-        if (!q.exec("ALTER TABLE users ADD COLUMN salt TEXT;")) {
-            qDebug() << "Add salt column failed:" << q.lastError().text();
-        } else {
-            // Fill salt for existing rows (weak, but avoids NULL). Ideally force reset.
-            // We'll set random salt and recompute hash only if we had plain (we didn't).
-            // For now: set salt to random and keep existing hash as-is.
-            QSqlQuery fill(db);
-            if (!fill.exec("UPDATE users SET salt = 'legacy' WHERE salt IS NULL OR salt = '';")) {
-                qDebug() << "Fill legacy salt failed:" << fill.lastError().text();
-            }
-        }
-    }
-
-    return db;
-}
-
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    QSqlDatabase db = initDatabase();
+    QSqlDatabase db = Database::initDatabase();
     if (!db.isOpen()) {
         qDebug() << "Database is not open. Exiting.";
         return -1;
@@ -206,7 +87,7 @@ int main(int argc, char *argv[])
                     } else {
                         // Protocol compatibility: if password is not present, treat passwordHash as plain if not sha256
                         if (passwordPlain.isEmpty()) {
-                            if (!legacyPassHash.isEmpty() && !looksLikeSha256Hex(legacyPassHash)) {
+                            if (!legacyPassHash.isEmpty() && ! Validators::looksLikeSha256Hex(legacyPassHash)) {
                                 passwordPlain = legacyPassHash; // TEMP
                             }
                         }
@@ -235,7 +116,7 @@ int main(int argc, char *argv[])
                                 QString storedHash = q.value(1).toString();
                                 QString salt = q.value(2).toString();
 
-                                QString computed = hashPassword(salt, passwordPlain);
+                                QString computed = PasswordHasher::hashPassword(salt, passwordPlain);
 
                                 if (computed != storedHash) {
                                     replyPayload["ok"] = false;
@@ -268,15 +149,15 @@ int main(int argc, char *argv[])
                         replyPayload["ok"] = false;
                         replyPayload["error"] = "EMPTY_NAME";
                     }
-                    else if (!isValidUsername(username)) {
+                    else if (!Validators::isValidUsername(username)) {
                         replyPayload["ok"] = false;
                         replyPayload["error"] = "INVALID_USERNAME";
                     }
-                    else if (!isValidPhone(phone)) {
+                    else if (!Validators::isValidPhone(phone)) {
                         replyPayload["ok"] = false;
                         replyPayload["error"] = "INVALID_PHONE";
                     }
-                    else if (!isValidEmail(email)) {
+                    else if (!Validators::isValidEmail(email)) {
                         replyPayload["ok"] = false;
                         replyPayload["error"] = "INVALID_EMAIL";
                     }
@@ -288,7 +169,7 @@ int main(int argc, char *argv[])
                             if (legacyPassHash.isEmpty()) {
                                 replyPayload["ok"] = false;
                                 replyPayload["error"] = "EMPTY_PASSWORD";
-                            } else if (looksLikeSha256Hex(legacyPassHash)) {
+                            } else if (Validators::looksLikeSha256Hex(legacyPassHash)) {
                                 replyPayload["ok"] = false;
                                 replyPayload["error"] = "PASSWORD_PROTOCOL_MISMATCH"; // force client to send plain password
                             } else {
@@ -297,13 +178,13 @@ int main(int argc, char *argv[])
                         }
 
                         if (!replyPayload.contains("error")) {
-                            if (!isStrongPasswordPlain(passwordPlain)) {
+                            if (!Validators::isStrongPasswordPlain(passwordPlain)) {
                                 replyPayload["ok"] = false;
                                 replyPayload["error"] = "WEAK_PASSWORD";
                             } else {
                                 // ---- salted hash ----
-                                QString salt = makeSalt();
-                                QString passHash = hashPassword(salt, passwordPlain);
+                                QString salt = PasswordHasher::makeSalt();
+                                QString passHash = PasswordHasher::hashPassword(salt, passwordPlain);
 
                                 QSqlQuery q(db);
                                 q.prepare(R"SQL(
@@ -353,11 +234,11 @@ int main(int argc, char *argv[])
                             replyPayload["ok"] = false;
                             replyPayload["error"] = "INVALID_NAME";
                         }
-                        else if (!newPhone.isEmpty() && !isValidPhone(newPhone)) {
+                        else if (!newPhone.isEmpty() && !Validators::isValidPhone(newPhone)) {
                             replyPayload["ok"] = false;
                             replyPayload["error"] = "INVALID_PHONE";
                         }
-                        else if (!newEmail.isEmpty() && !isValidEmail(newEmail)) {
+                        else if (!newEmail.isEmpty() && !Validators::isValidEmail(newEmail)) {
                             replyPayload["ok"] = false;
                             replyPayload["error"] = "INVALID_EMAIL";
                         }
@@ -367,19 +248,19 @@ int main(int argc, char *argv[])
                             QString newSalt, newHash;
 
                             if (newPasswordPlain.isEmpty()) {
-                                if (!legacyNewHash.isEmpty() && !looksLikeSha256Hex(legacyNewHash)) {
+                                if (!legacyNewHash.isEmpty() && !Validators::looksLikeSha256Hex(legacyNewHash)) {
                                     newPasswordPlain = legacyNewHash; // TEMP treat as plain
                                 }
                             }
 
                             if (!newPasswordPlain.isEmpty()) {
-                                if (!isStrongPasswordPlain(newPasswordPlain)) {
+                                if (!Validators::isStrongPasswordPlain(newPasswordPlain)) {
                                     replyPayload["ok"] = false;
                                     replyPayload["error"] = "WEAK_PASSWORD";
                                 } else {
                                     changePassword = true;
-                                    newSalt = makeSalt();
-                                    newHash = hashPassword(newSalt, newPasswordPlain);
+                                    newSalt = PasswordHasher::makeSalt();
+                                    newHash = PasswordHasher::hashPassword(newSalt, newPasswordPlain);
                                 }
                             }
 
