@@ -20,6 +20,10 @@ add_executable(PlotaServer
   PasswordHasher.cpp
   Database.h
   Database.cpp
+  SessionManager.h
+  SessionManager.cpp
+  AuthService.h
+  AuthService.cpp
 )
 
 target_link_libraries(PlotaServer PRIVATE

@@ -1,8 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 
-#include <QJsonDocument>
-#include <QJsonParseError>
+#include <QLineEdit>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -28,112 +27,98 @@ MainWindow::MainWindow(QWidget *parent)
     setForgotStatus("");
 
     // ---- Networking init ----
-    socket = new QTcpSocket(this);
+    proto = new ClientProtocol(this);
 
-    connect(socket, &QTcpSocket::connected, this, [=](){
+    connect(proto, &ClientProtocol::connected, this, [=](){
         qDebug() << "Connected to server!";
         setLoginStatus("Connected.");
     });
 
-    connect(socket, &QTcpSocket::disconnected, this, [=](){
+    connect(proto, &ClientProtocol::disconnected, this, [=](){
         qDebug() << "Disconnected from server!";
         setLoginStatus("Disconnected.");
     });
 
-    connect(socket, &QTcpSocket::readyRead, this, [=](){
-        while (socket->canReadLine()) {
-            QByteArray line = socket->readLine().trimmed();
-
-            QJsonParseError err;
-            QJsonDocument doc = QJsonDocument::fromJson(line, &err);
-            if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-                qDebug() << "Bad JSON from server:" << line;
-                continue;
-            }
-
-            QJsonObject msg = doc.object();
-            QString type = msg.value("type").toString();
-            QJsonObject payload = msg.value("payload").toObject();
-
-            qDebug() << "Reply type =" << type << "payload =" << payload;
-
-            // ---- handle replies ----
-            if (type == "signup_result") {
-                bool ok = payload.value("ok").toBool(false);
-                if (ok) {
-                    setSignupStatus("Signup OK. You can login now.");
-                    ui->stack->setCurrentWidget(ui->pageLogin);
-                } else {
-                    setSignupStatus("Signup failed: " + payload.value("error").toString());
-                }
-            }
-            else if (type == "profile_result") {
-                bool ok = payload.value("ok").toBool(false);
-                if (!ok) {
-                    setEditProfileStatus("Profile load failed: " + payload.value("error").toString());
-                } else {
-                    ui->leEditName->setText(payload.value("name").toString());
-                    ui->leEditUsername->setText(payload.value("username").toString());
-                    ui->leEditPhone->setText(payload.value("phone").toString());
-                    ui->leEditEmail->setText(payload.value("email").toString());
-
-                    // keep local state consistent
-                    currentUsername = payload.value("username").toString();
-                    currentName = payload.value("name").toString();
-                }
-            }
-
-
-            else if (type == "update_profile_result") {
-                bool ok = payload.value("ok").toBool(false);
-                if (ok) {
-                    setEditProfileStatus("Profile updated successfully.");
-                } else {
-                    setEditProfileStatus("Update failed: " + payload.value("error").toString());
-                }
-            }
-
-            else if (type == "login_result") {
-                bool ok = payload.value("ok").toBool(false);
-                if (ok) {
-                    currentUsername = ui->leLoginUsername->text().trimmed();
-                    currentName = payload.value("name").toString();
-
-                    setLoginStatus("Login OK. Welcome " + currentName);
-
-                    ui->stack->setCurrentWidget(ui->pageMainMenu);
-                    // Ask server for full profile (name/username/phone/email)
-                    QJsonObject req;
-                    req["type"] = "get_profile";
-                    req["payload"] = QJsonObject{};
-                    sendJson(req);
-
-
-                    // prefill edit profile fields (for now with what we have)
-                    ui->leEditName->setText(currentName);
-                    ui->leEditUsername->setText(currentUsername);
-                    ui->leEditPhone->setText("");   // we’ll fill these properly after we add profile_fetch (optional)
-                    ui->leEditEmail->setText("");
-                    ui->leEditPassword->setText("");
-                }
-                else {
-                    setLoginStatus("Login failed: " + payload.value("error").toString());
-                }
-            }
-            else if (type == "forgot_result") {
-                bool ok = payload.value("ok").toBool(false);
-                if (ok) {
-                    setForgotStatus("Password updated. Login now.");
-                    ui->stack->setCurrentWidget(ui->pageLogin);
-                } else {
-                    setForgotStatus("Reset failed: " + payload.value("error").toString());
-                }
-            }
-        }
+    connect(proto, &ClientProtocol::socketError, this, [=](const QString &e){
+        qDebug() << "Socket error:" << e;
+        setLoginStatus("Socket error: " + e);
     });
 
+    connect(proto, &ClientProtocol::badMessageReceived, this, [=](const QByteArray &line){
+        qDebug() << "Bad JSON from server:" << line;
+    });
+
+    connect(proto, &ClientProtocol::messageReceived, this,
+            [=](const QString &type, const QJsonObject &payload){
+                qDebug() << "Reply type =" << type << "payload =" << payload;
+
+                if (type == "signup_result") {
+                    bool ok = payload.value("ok").toBool(false);
+                    if (ok) {
+                        setSignupStatus("Signup OK. You can login now.");
+                        ui->stack->setCurrentWidget(ui->pageLogin);
+                    } else {
+                        setSignupStatus("Signup failed: " + payload.value("error").toString());
+                    }
+                }
+                else if (type == "profile_result") {
+                    bool ok = payload.value("ok").toBool(false);
+                    if (!ok) {
+                        setEditProfileStatus("Profile load failed: " + payload.value("error").toString());
+                    } else {
+                        ui->leEditName->setText(payload.value("name").toString());
+                        ui->leEditUsername->setText(payload.value("username").toString());
+                        ui->leEditPhone->setText(payload.value("phone").toString());
+                        ui->leEditEmail->setText(payload.value("email").toString());
+
+                        currentUsername = payload.value("username").toString();
+                        currentName = payload.value("name").toString();
+                    }
+                }
+                else if (type == "update_profile_result") {
+                    bool ok = payload.value("ok").toBool(false);
+                    if (ok) {
+                        setEditProfileStatus("Profile updated successfully.");
+                        ui->leEditPassword->clear();
+                    } else {
+                        setEditProfileStatus("Update failed: " + payload.value("error").toString());
+                    }
+                }
+                else if (type == "login_result") {
+                    bool ok = payload.value("ok").toBool(false);
+                    if (ok) {
+                        currentUsername = ui->leLoginUsername->text().trimmed();
+                        currentName = payload.value("name").toString();
+
+                        setLoginStatus("Login OK. Welcome " + currentName);
+                        ui->stack->setCurrentWidget(ui->pageMainMenu);
+
+                        // Ask server for full profile
+                        proto->sendMessage("get_profile", QJsonObject{});
+
+                        // temporary prefill until profile_result arrives
+                        ui->leEditName->setText(currentName);
+                        ui->leEditUsername->setText(currentUsername);
+                        ui->leEditPhone->setText("");
+                        ui->leEditEmail->setText("");
+                        ui->leEditPassword->setText("");
+                    } else {
+                        setLoginStatus("Login failed: " + payload.value("error").toString());
+                    }
+                }
+                else if (type == "forgot_result") {
+                    bool ok = payload.value("ok").toBool(false);
+                    if (ok) {
+                        setForgotStatus("Password updated. Login now.");
+                        ui->stack->setCurrentWidget(ui->pageLogin);
+                    } else {
+                        setForgotStatus("Reset failed: " + payload.value("error").toString());
+                    }
+                }
+            });
+
     // connect to localhost for now (later: user enters IP/port)
-    socket->connectToHost("127.0.0.1", 45454);
+    proto->connectToHost("127.0.0.1", 45454);
 
     // ---- Navigation buttons ----
     connect(ui->btnGoSignup, &QPushButton::clicked, this, [=](){
@@ -163,37 +148,31 @@ MainWindow::MainWindow(QWidget *parent)
 
     // ---- Actions: Signup/Login/Forgot ----
     connect(ui->btnSignup, &QPushButton::clicked, this, [=](){
-        QJsonObject msg;
-        msg["type"] = "signup";
         QJsonObject p;
         p["name"] = ui->leSignupName->text().trimmed();
         p["username"] = ui->leSignupUsername->text().trimmed();
         p["phone"] = ui->leSignupPhone->text().trimmed();
         p["email"] = ui->leSignupEmail->text().trimmed();
         p["password"] = ui->leSignupPassword->text();
-        msg["payload"] = p;
-        sendJson(msg);
+
+        proto->sendMessage("signup", p);
     });
 
     connect(ui->btnLogin, &QPushButton::clicked, this, [=](){
-        QJsonObject msg;
-        msg["type"] = "login";
         QJsonObject p;
         p["username"] = ui->leLoginUsername->text().trimmed();
         p["password"] = ui->leLoginPassword->text();
-        msg["payload"] = p;
-        sendJson(msg);
+
+        proto->sendMessage("login", p);
     });
 
     connect(ui->btnResetPassword, &QPushButton::clicked, this, [=](){
-        QJsonObject msg;
-        msg["type"] = "forgot_password";
         QJsonObject p;
         p["username"] = ui->leForgotUsername->text().trimmed();
         p["phone"] = ui->leForgotPhone->text().trimmed();
         p["newPassword"] = ui->leForgotNewPassword->text();
-        msg["payload"] = p;
-        sendJson(msg);
+
+        proto->sendMessage("forgot_password", p);
     });
 
     // Menu buttons (placeholders for now)
@@ -217,17 +196,13 @@ MainWindow::MainWindow(QWidget *parent)
             return;
         }
 
-        QJsonObject msg;
-        msg["type"] = "update_profile";
-
         QJsonObject p;
         p["newName"] = ui->leEditName->text().trimmed();
         p["newPhone"] = ui->leEditPhone->text().trimmed();
         p["newEmail"] = ui->leEditEmail->text().trimmed();
-        p["newPassword"] = ui->leEditPassword->text(); // optional; empty = no change
-        msg["payload"] = p;
+        p["newPassword"] = ui->leEditPassword->text();
 
-        sendJson(msg);
+        proto->sendMessage("update_profile", p);
     });
 
 }
@@ -237,18 +212,6 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::sendJson(const QJsonObject &obj)
-{
-    if (!socket || socket->state() != QAbstractSocket::ConnectedState) {
-        qDebug() << "Not connected, cannot send.";
-        return;
-    }
-
-    QJsonDocument doc(obj);
-    QByteArray data = doc.toJson(QJsonDocument::Compact);
-    data.append('\n');
-    socket->write(data);
-}
 
 void MainWindow::setLoginStatus(const QString &msg)
 {
@@ -264,7 +227,6 @@ void MainWindow::setForgotStatus(const QString &msg)
 {
     ui->lblForgotStatus->setText(msg);
 }
-
 
 void MainWindow::setEditProfileStatus(const QString &msg)
 {

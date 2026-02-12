@@ -6,7 +6,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 
-
+#include "ClientProtocol.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -29,9 +29,8 @@ private:
     void setEditProfileStatus(const QString &msg);
 
 
-    Ui::MainWindow *ui;    
-    QTcpSocket *socket;
-    void sendJson(const QJsonObject &obj);
+    Ui::MainWindow *ui;
+    ClientProtocol *proto = nullptr;
 
     void setLoginStatus(const QString &msg);
     void setSignupStatus(const QString &msg);
