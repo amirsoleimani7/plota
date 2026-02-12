@@ -132,6 +132,10 @@ int main(int argc, char *argv[])
                     reply["type"] = "othello_state_result";
                     replyPayload = othello.handleGetState(clientSocket);
                 }
+                else if (type == "othello_chat_send") {
+                    reply["type"] = "othello_chat_send_result";
+                    replyPayload = othello.handleChatSend(clientSocket, payload);
+                }
 
                 else {
                     reply["type"] = "error";

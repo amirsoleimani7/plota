@@ -2,18 +2,31 @@
 #include "RoomManager.h"
 
 #include <QTcpSocket>
+#include <QJsonDocument>
+#include <QDateTime>
+#include <QJsonArray>
+
+static void sendMessage(QTcpSocket *sock, const QString &type, const QJsonObject &payload)
+{
+    if (!sock) return;
+    QJsonObject msg;
+    msg["type"] = type;
+    msg["payload"] = payload;
+    QByteArray out = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+    out.append('\n');
+    sock->write(out);
+}
 
 OthelloRoomService::OthelloRoomService(RoomManager &rooms, QObject *parent)
     : QObject(parent), m_rooms(rooms)
 {
-    // When room becomes full, start/reset game
     connect(&m_rooms, &RoomManager::roomBecameFull, this, [this](const QString &code){
         startGameIfReady(code);
     });
 
-    // If a room is deleted, clean its game
     connect(&m_rooms, &RoomManager::roomEmptied, this, [this](const QString &code){
         m_games.remove(code);
+        m_chat.remove(code);   // ✅ also clear chat history
     });
 }
 
@@ -30,7 +43,6 @@ void OthelloRoomService::startGameIfReady(const QString &code)
 {
     if (!m_rooms.isFull(code)) return;
 
-    // reset game when second player joins
     OthelloGame g;
     g.reset();
     m_games.insert(code, g);
@@ -56,7 +68,6 @@ QString OthelloRoomService::createRoom(QTcpSocket *creator)
     ensureGameExists(code);
     emit roomCreated(code);
 
-    // emit initial state (waiting for second player)
     QJsonObject st = m_games[code].toJsonState(true);
     st["room"] = code;
     st["waitingForOpponent"] = true;
@@ -73,9 +84,6 @@ bool OthelloRoomService::joinRoom(const QString &code, QTcpSocket *joiner)
     ensureGameExists(code);
     emit roomJoined(code);
 
-    // startGameIfReady will reset and emit state when room becomes full
-    // but in case you joined a room that already had both players (shouldn't),
-    // we can emit anyway.
     if (m_rooms.isFull(code)) {
         startGameIfReady(code);
     } else {
@@ -90,8 +98,6 @@ QString OthelloRoomService::leaveRoom(QTcpSocket *sock)
     QString code = m_rooms.leaveRoom(sock);
     if (code.isEmpty()) return "";
 
-    // If room still exists, notify remaining player via state update later (network layer)
-    // We'll emit a "state changed" with waiting flag.
     if (m_rooms.getRoom(code)) {
         ensureGameExists(code);
         QJsonObject st = m_games[code].toJsonState(true);
@@ -199,10 +205,84 @@ QJsonObject OthelloRoomService::tryMove(QTcpSocket *sock, int r, int c)
         return out;
     }
 
-    // move applied => broadcast new state
     emitState(code);
 
     out["ok"] = true;
     out["state"] = g.toJsonState(true);
+    return out;
+}
+
+// =====================================================
+// ✅ CHAT IMPLEMENTATION (CORRECT FOR YOUR ROOM SYSTEM)
+// =====================================================
+
+QJsonObject OthelloRoomService::broadcastChat(QTcpSocket *sock, const QString &from, const QString &text)
+{
+    QJsonObject out;
+
+    QString code = roomOf(sock);
+    if (code.isEmpty()) {
+        out["ok"] = false;
+        out["error"] = "NOT_IN_ROOM";
+        return out;
+    }
+
+    const RoomManager::Room *room = m_rooms.getRoom(code);
+    if (!room) {
+        out["ok"] = false;
+        out["error"] = "ROOM_NOT_FOUND";
+        return out;
+    }
+
+    QString ts = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonObject chatPayload;
+    chatPayload["room"] = code;
+    chatPayload["from"] = from;
+    chatPayload["text"] = text;
+    chatPayload["ts"] = ts;
+
+    // store last N messages for this room
+    const int MAX_CHAT = 50;
+    m_chat[code].push_back(ChatMessage{from, text, ts});
+    while (m_chat[code].size() > MAX_CHAT)
+        m_chat[code].removeFirst();
+
+    // broadcast to both players
+    if (room->black) sendMessage(room->black, "othello_chat", chatPayload);
+    if (room->white) sendMessage(room->white, "othello_chat", chatPayload);
+
+    out["ok"] = true;
+    out["room"] = code;
+    return out;
+}
+
+QJsonObject OthelloRoomService::getChat(QTcpSocket *sock) const
+{
+    QJsonObject out;
+
+    QString code = roomOf(sock);
+    if (code.isEmpty()) {
+        out["ok"] = false;
+        out["error"] = "NOT_IN_ROOM";
+        return out;
+    }
+
+    out["ok"] = true;
+    out["room"] = code;
+
+    QJsonArray arr;
+    auto it = m_chat.find(code);
+    if (it != m_chat.end()) {
+        for (const ChatMessage &m : it.value()) {
+            QJsonObject o;
+            o["from"] = m.from;
+            o["text"] = m.text;
+            o["ts"] = m.tsIso;
+            arr.append(o);
+        }
+    }
+
+    out["messages"] = arr;
     return out;
 }

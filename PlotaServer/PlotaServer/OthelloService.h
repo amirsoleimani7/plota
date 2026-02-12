@@ -17,6 +17,7 @@ public:
     QJsonObject handleLeaveRoom(QTcpSocket *sock);
     QJsonObject handleGetState(QTcpSocket *sock);
     QJsonObject handleMove(QTcpSocket *sock, const QJsonObject &payload);
+    QJsonObject handleChatSend(QTcpSocket *sock, const QJsonObject &payload);
 
     // Called by main.cpp on disconnect
     void handleDisconnect(QTcpSocket *sock);

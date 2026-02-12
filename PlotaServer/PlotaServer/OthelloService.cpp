@@ -2,6 +2,21 @@
 #include "OthelloRoomService.h"
 
 #include <QTcpSocket>
+#include <QJsonDocument>
+#include <QDateTime>
+
+
+static void sendMessage(QTcpSocket *sock, const QString &type, const QJsonObject &payload)
+{
+    if (!sock) return;
+    QJsonObject msg;
+    msg["type"] = type;
+    msg["payload"] = payload;
+    QByteArray out = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+    out.append('\n');
+    sock->write(out);
+}
+
 
 OthelloService::OthelloService(OthelloRoomService &rooms)
     : m_rooms(rooms)
@@ -99,3 +114,35 @@ void OthelloService::handleDisconnect(QTcpSocket *sock)
     // Just leave room if in one.
     m_rooms.leaveRoom(sock);
 }
+
+QJsonObject OthelloService::handleChatSend(QTcpSocket *sock, const QJsonObject &payload)
+{
+    QJsonObject reply;
+
+    // Must be in a room (room service knows)
+    QString text = payload.value("text").toString().trimmed();
+
+    if (text.isEmpty()) {
+        reply["ok"] = false;
+        reply["error"] = "EMPTY_MESSAGE";
+        return reply;
+    }
+    if (text.size() > 300) {
+        reply["ok"] = false;
+        reply["error"] = "MESSAGE_TOO_LONG";
+        return reply;
+    }
+
+    // Username: if you don't have sessions here yet, use fallback.
+    // Better later: inject SessionManager and get real username.
+    QString from = payload.value("from").toString().trimmed();
+    if (from.isEmpty()) from = "Player";
+
+    // This function will broadcast to both players in that room.
+    QJsonObject res = m_rooms.broadcastChat(sock, from, text);
+
+    // res should be like: { ok:true, room:"ABC123" } or { ok:false, error:"NOT_IN_ROOM" }
+    return res;
+}
+
+
