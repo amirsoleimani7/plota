@@ -34,10 +34,12 @@ signals:
     void createRoomClicked();
     void joinRoomClicked();
     void leaveRoomClicked();
+    void backToMenuClicked();
 
 private:
     QLabel *lblTitle = nullptr;
     QLabel *lblStatus = nullptr;
+    QPushButton *btnBack = nullptr;
 
     QPushButton *btnCreate = nullptr;
 

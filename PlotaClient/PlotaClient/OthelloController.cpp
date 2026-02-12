@@ -180,7 +180,8 @@ void OthelloController::applyState(const QJsonObject &state)
             legal.push_back(QPoint(c, r));
     }
 
-    m_page->setGameState(board, legal, myTurn, waiting);
+    QVector<QPoint> shownLegal = (myTurn ? legal : QVector<QPoint>{});
+    m_page->setGameState(board, shownLegal, myTurn, waiting);
 
     // Update status text
     if (gameOver) {

@@ -22,6 +22,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     othelloController = new OthelloController(proto, othelloPage, this);
 
+    connect(othelloPage, &OthelloPage::backToMenuClicked, this, [this]() {
+        // optional: leave room automatically so user doesn't “stay” in a room
+        if (proto) {
+            proto->sendMessage("othello_leave_room", QJsonObject{});
+        }
+
+        ui->stack->setCurrentWidget(ui->pageMainMenu);
+    });
+
     // Navigate when Othello button clicked
     connect(ui->btnOthello, &QPushButton::clicked, this, [=]() {
         ui->stack->setCurrentWidget(othelloPage);

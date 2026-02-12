@@ -24,9 +24,15 @@ OthelloPage::OthelloPage(QWidget *parent)
     lblStatus->setWordWrap(true);
 
     // top controls
+    // top controls
     auto *row1 = new QHBoxLayout();
+
+    btnBack = new QPushButton("Back", this);
+    row1->addWidget(btnBack);
+
     btnCreate = new QPushButton("Create Room", this);
     row1->addWidget(btnCreate);
+
     row1->addStretch(1);
 
     auto *row2 = new QHBoxLayout();
@@ -53,7 +59,9 @@ OthelloPage::OthelloPage(QWidget *parent)
     connect(btnCreate, &QPushButton::clicked, this, &OthelloPage::createRoomClicked);
     connect(btnJoin, &QPushButton::clicked, this, &OthelloPage::joinRoomClicked);
     connect(btnLeave, &QPushButton::clicked, this, &OthelloPage::leaveRoomClicked);
+    connect(btnBack, &QPushButton::clicked, this, &OthelloPage::backToMenuClicked);
 }
+
 
 void OthelloPage::setStatus(const QString &text)
 {
