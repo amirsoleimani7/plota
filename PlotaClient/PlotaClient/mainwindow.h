@@ -3,6 +3,9 @@
 
 #include <QMainWindow>
 #include <QTcpSocket>
+#include <QJsonObject>
+#include <QJsonDocument>
+
 
 
 QT_BEGIN_NAMESPACE
@@ -22,5 +25,7 @@ public:
 private:
     Ui::MainWindow *ui;    
     QTcpSocket *socket;
+    void sendJson(const QJsonObject &obj);
+
 };
 #endif // MAINWINDOW_H
