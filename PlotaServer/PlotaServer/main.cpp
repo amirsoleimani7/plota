@@ -2,10 +2,30 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QDebug>
+#include <QHostAddress>
 
+
+// json file send and recive
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+
+
+//in-memory user store
+#include <QMap>
+
+
+
+struct User {
+    QString name;
+    QString username;
+    QString phone;
+    QString email;
+    QString passwordHash; // we’ll hash later
+};
+
+QMap<QString, User> users; // key = username
+
 
 int main(int argc, char *argv[])
 {
@@ -37,10 +57,70 @@ int main(int argc, char *argv[])
                 qDebug() << "JSON type =" << type << "payload =" << payload;
 
                 // reply example
+                // ---- handle message types here ----
                 QJsonObject reply;
-                reply["type"] = "hello_ack";
                 QJsonObject replyPayload;
-                replyPayload["ok"] = true;
+
+                if (type == "hello") {
+                    reply["type"] = "hello_ack";
+                    replyPayload["ok"] = true;
+                }
+                else if (type == "signup") {
+                    reply["type"] = "signup_result";
+
+                    QString username = payload.value("username").toString().trimmed();
+                    QString name     = payload.value("name").toString().trimmed();
+                    QString phone    = payload.value("phone").toString().trimmed();
+                    QString email    = payload.value("email").toString().trimmed();
+                    QString passHash = payload.value("passwordHash").toString();
+
+                    if (username.isEmpty() || passHash.isEmpty()) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "EMPTY_USERNAME_OR_PASSWORD";
+                    }
+                    else if (users.contains(username)) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "USERNAME_TAKEN";
+                    }
+                    else {
+                        User u;
+                        u.username = username;
+                        u.name = name;
+                        u.phone = phone;
+                        u.email = email;
+                        u.passwordHash = passHash;
+
+                        users.insert(username, u);
+
+                        replyPayload["ok"] = true;
+                    }
+                }
+                else if (type == "login") {
+                    reply["type"] = "login_result";
+
+                    QString username = payload.value("username").toString().trimmed();
+                    QString passHash = payload.value("passwordHash").toString();
+
+                    if (!users.contains(username)) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "NO_SUCH_USER";
+                    }
+                    else if (users[username].passwordHash != passHash) {
+                        replyPayload["ok"] = false;
+                        replyPayload["error"] = "WRONG_PASSWORD";
+                    }
+                    else {
+                        replyPayload["ok"] = true;
+                        replyPayload["name"] = users[username].name;
+                    }
+                }
+
+                else {
+                    reply["type"] = "error";
+                    replyPayload["ok"] = false;
+                    replyPayload["error"] = "UNKNOWN_TYPE";
+                }
+
                 reply["payload"] = replyPayload;
 
                 QByteArray out = QJsonDocument(reply).toJson(QJsonDocument::Compact);
