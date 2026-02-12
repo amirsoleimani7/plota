@@ -1,34 +1,18 @@
 #include "OthelloService.h"
 #include "OthelloRoomService.h"
+#include "SessionManager.h"
 
 #include <QTcpSocket>
-#include <QJsonDocument>
-#include <QDateTime>
 
-
-static void sendMessage(QTcpSocket *sock, const QString &type, const QJsonObject &payload)
-{
-    if (!sock) return;
-    QJsonObject msg;
-    msg["type"] = type;
-    msg["payload"] = payload;
-    QByteArray out = QJsonDocument(msg).toJson(QJsonDocument::Compact);
-    out.append('\n');
-    sock->write(out);
-}
-
-
-OthelloService::OthelloService(OthelloRoomService &rooms)
+OthelloService::OthelloService(OthelloRoomService &rooms, SessionManager &sessions)
     : m_rooms(rooms)
+    , m_sessions(sessions)
 {
 }
 
 QJsonObject OthelloService::handleCreateRoom(QTcpSocket *sock)
 {
     QJsonObject out;
-
-    // require logged in? (optional)
-    // For now we allow anyone connected. Later you can enforce sessions.
 
     QString code = m_rooms.createRoom(sock);
     if (code.isEmpty()) {
@@ -40,7 +24,7 @@ QJsonObject OthelloService::handleCreateRoom(QTcpSocket *sock)
 
     out["ok"] = true;
     out["room"] = code;
-    out["youAre"] = (int)m_rooms.playerColor(sock); // should be Black
+    out["youAre"] = (int)m_rooms.playerColor(sock);
     return out;
 }
 
@@ -65,7 +49,7 @@ QJsonObject OthelloService::handleJoinRoom(QTcpSocket *sock, const QJsonObject &
 
     out["ok"] = true;
     out["room"] = code;
-    out["youAre"] = (int)m_rooms.playerColor(sock); // should be White
+    out["youAre"] = (int)m_rooms.playerColor(sock);
     return out;
 }
 
@@ -87,13 +71,11 @@ QJsonObject OthelloService::handleLeaveRoom(QTcpSocket *sock)
 
 QJsonObject OthelloService::handleGetState(QTcpSocket *sock)
 {
-    // OthelloRoomService already returns {ok, error?, state?}
     return m_rooms.currentStateFor(sock, true);
 }
 
 QJsonObject OthelloService::handleMove(QTcpSocket *sock, const QJsonObject &payload)
 {
-    // payload needs {r:int, c:int}
     QJsonObject out;
 
     if (!payload.contains("r") || !payload.contains("c")) {
@@ -105,23 +87,25 @@ QJsonObject OthelloService::handleMove(QTcpSocket *sock, const QJsonObject &payl
     int r = payload.value("r").toInt(-1);
     int c = payload.value("c").toInt(-1);
 
-    // OthelloRoomService will do bounds + turn + legality checks
     return m_rooms.tryMove(sock, r, c);
 }
 
-void OthelloService::handleDisconnect(QTcpSocket *sock)
-{
-    // Just leave room if in one.
-    m_rooms.leaveRoom(sock);
-}
+// ===============================
+// ✅ CHAT
+// ===============================
 
 QJsonObject OthelloService::handleChatSend(QTcpSocket *sock, const QJsonObject &payload)
 {
     QJsonObject reply;
 
-    // Must be in a room (room service knows)
-    QString text = payload.value("text").toString().trimmed();
+    QString username = m_sessions.username(sock);
+    if (username.isEmpty()) {
+        reply["ok"] = false;
+        reply["error"] = "NOT_LOGGED_IN";
+        return reply;
+    }
 
+    QString text = payload.value("text").toString().trimmed();
     if (text.isEmpty()) {
         reply["ok"] = false;
         reply["error"] = "EMPTY_MESSAGE";
@@ -133,16 +117,26 @@ QJsonObject OthelloService::handleChatSend(QTcpSocket *sock, const QJsonObject &
         return reply;
     }
 
-    // Username: if you don't have sessions here yet, use fallback.
-    // Better later: inject SessionManager and get real username.
-    QString from = payload.value("from").toString().trimmed();
-    if (from.isEmpty()) from = "Player";
-
-    // This function will broadcast to both players in that room.
-    QJsonObject res = m_rooms.broadcastChat(sock, from, text);
-
-    // res should be like: { ok:true, room:"ABC123" } or { ok:false, error:"NOT_IN_ROOM" }
-    return res;
+    // Let room service broadcast + store
+    return m_rooms.broadcastChat(sock, username, text);
 }
 
+// ✅ GET last chat messages of my current room
+QJsonObject OthelloService::handleChatGet(QTcpSocket *sock)
+{
+    QJsonObject reply;
 
+    QString username = m_sessions.username(sock);
+    if (username.isEmpty()) {
+        reply["ok"] = false;
+        reply["error"] = "NOT_LOGGED_IN";
+        return reply;
+    }
+
+    return m_rooms.getChat(sock);
+}
+
+void OthelloService::handleDisconnect(QTcpSocket *sock)
+{
+    m_rooms.leaveRoom(sock);
+}

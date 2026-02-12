@@ -5,11 +5,12 @@
 
 class QTcpSocket;
 class OthelloRoomService;
+class SessionManager;
 
 class OthelloService
 {
 public:
-    explicit OthelloService(OthelloRoomService &rooms);
+    explicit OthelloService(OthelloRoomService &rooms, SessionManager &sessions);
 
     // Messages
     QJsonObject handleCreateRoom(QTcpSocket *sock);
@@ -17,13 +18,17 @@ public:
     QJsonObject handleLeaveRoom(QTcpSocket *sock);
     QJsonObject handleGetState(QTcpSocket *sock);
     QJsonObject handleMove(QTcpSocket *sock, const QJsonObject &payload);
+
+    // ✅ chat
     QJsonObject handleChatSend(QTcpSocket *sock, const QJsonObject &payload);
+    QJsonObject handleChatGet(QTcpSocket *sock);
 
     // Called by main.cpp on disconnect
     void handleDisconnect(QTcpSocket *sock);
 
 private:
     OthelloRoomService &m_rooms;
+    SessionManager &m_sessions;
 };
 
 #endif // OTHELLOSERVICE_H

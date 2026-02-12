@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     AuthService auth(db, sessions);
     RoomManager roomMgr;
     OthelloRoomService othelloRooms(roomMgr);
-    OthelloService othello(othelloRooms);
+    OthelloService othello(othelloRooms, sessions);
 
     QObject::connect(&othelloRooms, &OthelloRoomService::roomStateChanged,
                      [&](const QString &code, const QJsonObject &state) {
@@ -135,6 +135,10 @@ int main(int argc, char *argv[])
                 else if (type == "othello_chat_send") {
                     reply["type"] = "othello_chat_send_result";
                     replyPayload = othello.handleChatSend(clientSocket, payload);
+                }
+                else if (type == "othello_chat_get") {
+                    reply["type"] = "othello_chat_get_result";
+                    replyPayload = othello.handleChatGet(clientSocket);
                 }
 
                 else {

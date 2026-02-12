@@ -8,6 +8,7 @@
 class QLabel;
 class QPushButton;
 class QLineEdit;
+class QTextEdit;
 class OthelloBoardWidget;
 
 class OthelloPage : public QWidget
@@ -20,6 +21,7 @@ public:
                       const QVector<QPoint> &legalMoves,
                       bool myTurn,
                       bool waiting);
+
     void setInRoom(bool inRoom);
     OthelloBoardWidget* boardWidget() const { return m_board; }
 
@@ -30,17 +32,24 @@ public:
     // UI getters
     QString roomCodeInput() const;
 
+    // ✅ chat UI helpers
+    void appendChatMessage(const QString &from, const QString &text, const QString &ts);
+    void clearChat();
+
 signals:
     void createRoomClicked();
     void joinRoomClicked();
     void leaveRoomClicked();
     void backToMenuClicked();
 
+    // ✅ chat
+    void chatSendClicked(const QString &text);
+
 private:
     QLabel *lblTitle = nullptr;
     QLabel *lblStatus = nullptr;
-    QPushButton *btnBack = nullptr;
 
+    QPushButton *btnBack = nullptr;
     QPushButton *btnCreate = nullptr;
 
     QLineEdit *leRoom = nullptr;
@@ -49,6 +58,11 @@ private:
     QPushButton *btnLeave = nullptr;
 
     OthelloBoardWidget *m_board = nullptr;
+
+    // ✅ chat widgets
+    QTextEdit *teChat = nullptr;
+    QLineEdit *leChat = nullptr;
+    QPushButton *btnSend = nullptr;
 };
 
 #endif // OTHELLOPAGE_H
