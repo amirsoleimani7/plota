@@ -24,6 +24,10 @@ add_executable(PlotaServer
   SessionManager.cpp
   AuthService.h
   AuthService.cpp
+  OthelloLogic.h
+  OthelloLogic.cpp
+  RoomManager.h
+  RoomManager.cpp
 )
 
 target_link_libraries(PlotaServer PRIVATE

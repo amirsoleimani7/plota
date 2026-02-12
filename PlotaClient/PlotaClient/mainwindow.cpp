@@ -204,7 +204,6 @@ MainWindow::MainWindow(QWidget *parent)
 
         proto->sendMessage("update_profile", p);
     });
-
 }
 
 MainWindow::~MainWindow()
