@@ -8,5 +8,6 @@
         <file>assets/checkers-logo.png</file>
         <file>assets/connect4-logo.png</file>
         <file>assets/othello-logo.png</file>
+        <file>assets/bg-remove.png</file>
     </qresource>
 </RCC>

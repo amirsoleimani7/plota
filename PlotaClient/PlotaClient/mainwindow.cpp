@@ -44,11 +44,29 @@ static void alarmToast(QWidget *parent, const QString &msg, Toast::Kind kind, in
     Toast::show(parent, t, kind, ms);
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+
+    if (!m_loginLogo.isNull() && ui->lblLoginLogo) {
+        ui->lblLoginLogo->setPixmap(
+            m_loginLogo.scaled(
+                ui->lblLoginLogo->size(),
+                Qt::KeepAspectRatioByExpanding,   // 🔥 this is the key
+                Qt::SmoothTransformation
+                )
+            );
+    }
+}
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    m_loginLogo = QPixmap(":/assets/bg-remove.png");
 
     qDebug() << "STAGE 1: setupUi done";
 
@@ -436,3 +454,4 @@ void MainWindow::connectToServer()
     if (!proto) return;
     proto->connectToHost("127.0.0.1", 45454);
 }
+

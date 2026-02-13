@@ -18,7 +18,7 @@
     <item>
      <widget class="QStackedWidget" name="stack">
       <property name="currentIndex">
-       <number>3</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="pageLogin">
        <layout class="QVBoxLayout" name="verticalLayout">
@@ -34,6 +34,19 @@
            </size>
           </property>
          </spacer>
+        </item>
+        <item alignment="Qt::AlignmentFlag::AlignHCenter">
+         <widget class="QLabel" name="lblLoginLogo">
+          <property name="minimumSize">
+           <size>
+            <width>500</width>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>TextLabel</string>
+          </property>
+         </widget>
         </item>
         <item alignment="Qt::AlignmentFlag::AlignHCenter">
          <widget class="QFrame" name="cardLogin">

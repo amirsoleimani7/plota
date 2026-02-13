@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QJsonObject>
+#include <QResizeEvent>
+#include <QPixmap>
 
 #include "ClientProtocol.h"
 
@@ -23,6 +25,9 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
     // who is logged in
     QString currentUsername;
@@ -38,6 +43,8 @@ private:
     StackAnimator *anim = nullptr;
 
     bool everConnected = false;
+    QPixmap m_loginLogo;
+
 
     void connectToServer();
 
