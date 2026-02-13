@@ -30,9 +30,14 @@ Plota is a full-stack application featuring an **online Othello (Reversi) game**
 
 > Screenshots are located in: `plota/ScreenShots/`
 
-| Login | Main Menu | Online Game + Chat |
-|------|-----------|--------------------|
-| ![Login](ScreenShots/login-page.png) | ![Main Menu](ScreenShots/main-menu.png) | ![Online Othello Chat](ScreenShots/online-othello-chat.png) |
+# login page
+![Login](ScreenShots/login-page.png) 
+
+# main menu
+![Main Menu](ScreenShots/main-menu.png) 
+
+# othello game
+![Online Othello Chat](ScreenShots/online-othello-chat.png) 
 
 ---
 
