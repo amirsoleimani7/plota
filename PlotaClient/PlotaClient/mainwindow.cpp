@@ -6,6 +6,9 @@
 #include "ConnectionPage.h"
 #include "StackAnimator.h"
 
+#include "ButtonFx.h"
+#include <QPushButton>
+
 #include <QTimer>
 #include <QLineEdit>
 #include <QDebug>
@@ -242,6 +245,9 @@ MainWindow::MainWindow(QWidget *parent)
     QTimer::singleShot(0, this, [this](){
         connectToServer();
     });
+
+    const auto buttons = this->findChildren<QPushButton*>();
+    for (auto *b : buttons) ButtonFx::install(b);
 }
 
 MainWindow::~MainWindow()
