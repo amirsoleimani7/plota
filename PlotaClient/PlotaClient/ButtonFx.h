@@ -5,5 +5,5 @@ class QPushButton;
 class ButtonFx : public QObject {
     Q_OBJECT
 public:
-    static void install(QPushButton *btn, int durationMs = 110);
+    static void install(QPushButton *btn, int durationMs = 200);
 };

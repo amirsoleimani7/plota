@@ -85,3 +85,11 @@ QPushButton:pressed {
     padding-top: 10px;   /* makes content look lower */
     padding-bottom: 6px;
 }
+
+QWidget:not(#toast) {
+    font-family: "Segoe UI", "Inter", "Arial";
+    font-size: 14px;
+    background: #0f1115;
+    color: #e8e8e8;
+}
+

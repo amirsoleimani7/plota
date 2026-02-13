@@ -9,6 +9,8 @@
 #include "ButtonFx.h"
 #include <QPushButton>
 
+#include "Toast.h"
+
 #include <QTimer>
 #include <QLineEdit>
 #include <QDebug>
@@ -22,6 +24,14 @@ void MainWindow::switchPage(QWidget *page, int dir, int ms)
     } else {
         ui->stack->setCurrentWidget(page);
     }
+}
+
+// Small helper: show toast only for non-empty messages
+static void alarmToast(QWidget *parent, const QString &msg, Toast::Kind kind, int ms = 2500)
+{
+    const QString t = msg.trimmed();
+    if (t.isEmpty()) return;
+    Toast::show(parent, t, kind, ms);
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -46,6 +56,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(connectionPage, &ConnectionPage::retryClicked, this, [this](){
         if (!connectionPage) return;
         connectionPage->setConnecting("127.0.0.1:45454");
+
+        // toast (optional)
+        alarmToast(this, "Reconnecting…", Toast::Info, 1200);
+
         connectToServer();
     });
 
@@ -258,21 +272,70 @@ MainWindow::~MainWindow()
 void MainWindow::setLoginStatus(const QString &msg)
 {
     if (ui) ui->lblLoginStatus->setText(msg);
+
+    const QString t = msg.trimmed();
+    if (t.isEmpty()) return;
+
+    if (t.startsWith("Login failed", Qt::CaseInsensitive) ||
+        t.startsWith("Socket error", Qt::CaseInsensitive) ||
+        t.startsWith("Disconnected", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Error);
+    } else if (t.startsWith("Login OK", Qt::CaseInsensitive) ||
+               t.startsWith("Connected", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Success);
+    } else {
+        alarmToast(this, t, Toast::Info);
+    }
 }
 
 void MainWindow::setSignupStatus(const QString &msg)
 {
     if (ui) ui->lblSignupStatus->setText(msg);
+
+    const QString t = msg.trimmed();
+    if (t.isEmpty()) return;
+
+    if (t.contains("failed", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Error);
+    } else if (t.contains("OK", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Success);
+    } else {
+        alarmToast(this, t, Toast::Info);
+    }
 }
 
 void MainWindow::setForgotStatus(const QString &msg)
 {
     if (ui) ui->lblForgotStatus->setText(msg);
+
+    const QString t = msg.trimmed();
+    if (t.isEmpty()) return;
+
+    if (t.contains("failed", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Error);
+    } else if (t.contains("updated", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Success);
+    } else {
+        alarmToast(this, t, Toast::Info);
+    }
 }
 
 void MainWindow::setEditProfileStatus(const QString &msg)
 {
     if (ui) ui->lblEditProfileStatus->setText(msg);
+
+    const QString t = msg.trimmed();
+    if (t.isEmpty()) return;
+
+    if (t.contains("failed", Qt::CaseInsensitive) ||
+        t.contains("error", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Error);
+    } else if (t.contains("success", Qt::CaseInsensitive) ||
+               t.contains("updated", Qt::CaseInsensitive)) {
+        alarmToast(this, t, Toast::Success);
+    } else {
+        alarmToast(this, t, Toast::Info);
+    }
 }
 
 void MainWindow::connectToServer()

@@ -38,6 +38,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         resources.qrc
         ButtonFx.h
         ButtonFx.cpp
+        Toast.h
+        Toast.cpp
 
 
 
