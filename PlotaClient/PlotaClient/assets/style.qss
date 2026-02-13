@@ -80,3 +80,8 @@ QProgressBar::chunk {
     background: #2563eb;
     border-radius: 6px;
 }
+
+QPushButton:pressed {
+    padding-top: 10px;   /* makes content look lower */
+    padding-bottom: 6px;
+}

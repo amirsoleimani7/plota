@@ -12,35 +12,61 @@ void ButtonFx::install(QPushButton *btn, int durationMs)
 {
     if (!btn) return;
 
-    // prevent double install
     if (btn->property(kFxInstalledProp).toBool()) return;
     btn->setProperty(kFxInstalledProp, true);
 
-    // Opacity effect (visible)
-    auto *op = new QGraphicsOpacityEffect(btn);
-    op->setOpacity(1.0);
-    btn->setGraphicsEffect(op);
+    // Put everything on a single graphics effect stack:
+    // QWidget supports only ONE graphicsEffect, so we use DropShadow and animate its offset + blur
+    auto *shadow = new QGraphicsDropShadowEffect(btn);
+    shadow->setBlurRadius(5);
+    shadow->setOffset(0, 2);      // "resting" shadow
+    // shadow->setColor(...)       // optional; let default/QSS handle look
+    btn->setGraphicsEffect(shadow);
 
-    auto *fadeDown = new QPropertyAnimation(op, "opacity", btn);
-    fadeDown->setDuration(durationMs);
-    fadeDown->setStartValue(1.0);
-    fadeDown->setEndValue(0.1);          // <-- MUCH more visible
-    fadeDown->setEasingCurve(QEasingCurve::OutCubic);
+    // Opacity (we'll animate via a 2nd effect? can't, only one effect)
+    // So instead: animate "strength" by blur+offset and use QSS :pressed background.
+    // If you still want opacity fade, do it in QSS with QPushButton:pressed { ... }.
 
-    auto *fadeUp = new QPropertyAnimation(op, "opacity", btn);
-    fadeUp->setDuration(durationMs);
-    fadeUp->setStartValue(0.72);
-    fadeUp->setEndValue(1.0);
-    fadeUp->setEasingCurve(QEasingCurve::OutCubic);
+    // Animations for "press down" feel (layout-safe)
+    auto *pressOffset = new QPropertyAnimation(shadow, "offset", btn);
+    pressOffset->setDuration(durationMs);
+    pressOffset->setStartValue(QPointF(0, 4));
+    pressOffset->setEndValue(QPointF(0, 1)); // shadow closer => looks pressed
+    pressOffset->setEasingCurve(QEasingCurve::OutCubic);
 
-    QObject::connect(btn, &QPushButton::pressed, btn, [fadeDown, fadeUp]() {
-        fadeUp->stop();
-        fadeDown->stop();
-        fadeDown->start();
+    auto *pressBlur = new QPropertyAnimation(shadow, "blurRadius", btn);
+    pressBlur->setDuration(durationMs);
+    pressBlur->setStartValue(18.0);
+    pressBlur->setEndValue(8.0);
+    pressBlur->setEasingCurve(QEasingCurve::OutCubic);
+
+    auto *releaseOffset = new QPropertyAnimation(shadow, "offset", btn);
+    releaseOffset->setDuration(durationMs);
+    releaseOffset->setStartValue(QPointF(0, 1));
+    releaseOffset->setEndValue(QPointF(0, 4));
+    releaseOffset->setEasingCurve(QEasingCurve::OutCubic);
+
+    auto *releaseBlur = new QPropertyAnimation(shadow, "blurRadius", btn);
+    releaseBlur->setDuration(durationMs);
+    releaseBlur->setStartValue(8.0);
+    releaseBlur->setEndValue(18.0);
+    releaseBlur->setEasingCurve(QEasingCurve::OutCubic);
+
+    QObject::connect(btn, &QPushButton::pressed, btn, [=]() {
+        releaseOffset->stop();
+        releaseBlur->stop();
+        pressOffset->stop();
+        pressBlur->stop();
+        pressOffset->start();
+        pressBlur->start();
     });
-    QObject::connect(btn, &QPushButton::released, btn, [fadeDown, fadeUp]() {
-        fadeDown->stop();
-        fadeUp->stop();
-        fadeUp->start();
+
+    QObject::connect(btn, &QPushButton::released, btn, [=]() {
+        pressOffset->stop();
+        pressBlur->stop();
+        releaseOffset->stop();
+        releaseBlur->stop();
+        releaseOffset->start();
+        releaseBlur->start();
     });
 }
