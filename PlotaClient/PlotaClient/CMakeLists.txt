@@ -36,6 +36,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ConnectionPage.h
         ConnectionPage.cpp
         resources.qrc
+        ButtonFx.h
+        ButtonFx.cpp
 
 
 

@@ -2,22 +2,17 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QTcpSocket>
 #include <QJsonObject>
-#include <QJsonDocument>
 
 #include "ClientProtocol.h"
-#include "StackAnimator.h"
 
 class OthelloPage;
 class OthelloController;
 class ConnectionPage;
-
+class StackAnimator;
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
+namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow
@@ -29,30 +24,30 @@ public:
     ~MainWindow();
 
 private:
-
-    QString currentUsername;   // who is logged in
+    // who is logged in
+    QString currentUsername;
     QString currentName;
-    void setEditProfileStatus(const QString &msg);
 
-
-    Ui::MainWindow *ui;
+    Ui::MainWindow *ui = nullptr;
     ClientProtocol *proto = nullptr;
+
     OthelloPage *othelloPage = nullptr;
     OthelloController *othelloController = nullptr;
-
-
-    void setLoginStatus(const QString &msg);
-    void setSignupStatus(const QString &msg);
-    void setForgotStatus(const QString &msg);
 
     ConnectionPage *connectionPage = nullptr;
     StackAnimator *anim = nullptr;
 
     bool everConnected = false;
-    void go(QWidget *w, StackAnimator::Direction dir = StackAnimator::NoSlide);
+
     void connectToServer();
 
+    void setLoginStatus(const QString &msg);
+    void setSignupStatus(const QString &msg);
+    void setForgotStatus(const QString &msg);
+    void setEditProfileStatus(const QString &msg);
 
-
+    // Animation-aware page switch (NO logic change, just replaces setCurrentWidget)
+    void switchPage(QWidget *page, int dir /* StackAnimator::Direction */, int ms = 220);
 };
+
 #endif // MAINWINDOW_H

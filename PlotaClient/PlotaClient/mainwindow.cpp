@@ -1,50 +1,58 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+
 #include "OthelloPage.h"
 #include "OthelloController.h"
-
 #include "ConnectionPage.h"
 #include "StackAnimator.h"
+
 #include <QTimer>
-
-
 #include <QLineEdit>
 #include <QDebug>
+
+void MainWindow::switchPage(QWidget *page, int dir, int ms)
+{
+    if (!ui || !ui->stack || !page) return;
+
+    if (anim) {
+        anim->go(ui->stack, page, static_cast<StackAnimator::Direction>(dir), ms);
+    } else {
+        ui->stack->setCurrentWidget(page);
+    }
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    qDebug() << "STAGE 1: setupUi done";
+
+    // Create animator (no logic change)
     anim = new StackAnimator(this);
 
-    // Add connection page dynamically (no .ui changes required)
+    // --- Connection Page ---
     connectionPage = new ConnectionPage(this);
     ui->stack->insertWidget(0, connectionPage);
 
-    // Show connection page first
+    // show connection page FIRST
     ui->stack->setCurrentWidget(connectionPage);
     connectionPage->setConnecting("127.0.0.1:45454");
 
-    // Create protocol once (as you already do)
-    proto = new ClientProtocol(this);
-
-    // retry button
     connect(connectionPage, &ConnectionPage::retryClicked, this, [this](){
+        if (!connectionPage) return;
         connectionPage->setConnecting("127.0.0.1:45454");
         connectToServer();
     });
 
-    // Helper for animated navigation
-    auto goTo = [this](QWidget *w, StackAnimator::Direction dir = StackAnimator::NoSlide){
-        if (anim) anim->go(ui->stack, w, dir);
-        else ui->stack->setCurrentWidget(w);
-    };
+    qDebug() << "STAGE 2: connectionPage created";
 
+    // --- Protocol (create ONCE) ---
+    proto = new ClientProtocol(this);
+    qDebug() << "STAGE 3: proto created";
 
-    // ---- UI init ----
-    ui->stack->setCurrentWidget(ui->pageLogin);
-
+    // --- Basic UI init ---
     ui->leLoginPassword->setEchoMode(QLineEdit::Password);
     ui->leSignupPassword->setEchoMode(QLineEdit::Password);
     ui->leForgotNewPassword->setEchoMode(QLineEdit::Password);
@@ -57,41 +65,41 @@ MainWindow::MainWindow(QWidget *parent)
     setForgotStatus("");
     setEditProfileStatus("");
 
-    // ✅ 1) networking ONCE
-    proto = new ClientProtocol(this);
-
-    connect(proto, &ClientProtocol::connected, this, [=](){
+    // --- Protocol signals ---
+    connect(proto, &ClientProtocol::connected, this, [this](){
         everConnected = true;
         setLoginStatus("Connected.");
-        // Move to login screen once connected
-        goTo(ui->pageLogin, StackAnimator::Up);
+        // Connection -> Login (animate)
+        switchPage(ui->pageLogin, StackAnimator::Down);
     });
 
-    connect(proto, &ClientProtocol::disconnected, this, [=](){
+    connect(proto, &ClientProtocol::disconnected, this, [this](){
         setLoginStatus("Disconnected.");
-        // If we lose connection at any time, show retry page
-        connectionPage->setFailed("Disconnected from server.");
-        goTo(connectionPage, StackAnimator::Down);
+        if (connectionPage) connectionPage->setFailed("Disconnected from server.");
+        // Any page -> Connection (animate)
+        switchPage(connectionPage, StackAnimator::Up);
     });
 
-    connect(proto, &ClientProtocol::socketError, this, [=](const QString &e){
+    connect(proto, &ClientProtocol::socketError, this, [this](const QString &e){
         setLoginStatus("Socket error: " + e);
-        connectionPage->setFailed("Socket error:\n" + e);
-        goTo(connectionPage, StackAnimator::Down);
+        if (connectionPage) connectionPage->setFailed("Socket error:\n" + e);
+        switchPage(connectionPage, StackAnimator::Up);
     });
+
     connect(proto, &ClientProtocol::badMessageReceived, this, [=](const QByteArray &line){
         qDebug() << "Bad JSON from server:" << line;
     });
 
     connect(proto, &ClientProtocol::messageReceived, this,
-            [=](const QString &type, const QJsonObject &payload){
+            [this](const QString &type, const QJsonObject &payload){
                 qDebug() << "Reply type =" << type << "payload =" << payload;
+                if (!ui) return;
 
                 if (type == "signup_result") {
                     bool ok = payload.value("ok").toBool(false);
                     setSignupStatus(ok ? "Signup OK. You can login now."
                                        : "Signup failed: " + payload.value("error").toString());
-                    if (ok) ui->stack->setCurrentWidget(ui->pageLogin);
+                    if (ok) switchPage(ui->pageLogin, StackAnimator::Right);
                 }
                 else if (type == "login_result") {
                     bool ok = payload.value("ok").toBool(false);
@@ -100,9 +108,9 @@ MainWindow::MainWindow(QWidget *parent)
                         currentName = payload.value("name").toString();
 
                         setLoginStatus("Login OK. Welcome " + currentName);
-                        ui->stack->setCurrentWidget(ui->pageMainMenu);
+                        switchPage(ui->pageMainMenu, StackAnimator::Up);
 
-                        proto->sendMessage("get_profile", QJsonObject{});
+                        if (proto) proto->sendMessage("get_profile", QJsonObject{});
                     } else {
                         setLoginStatus("Login failed: " + payload.value("error").toString());
                     }
@@ -131,60 +139,65 @@ MainWindow::MainWindow(QWidget *parent)
                     bool ok = payload.value("ok").toBool(false);
                     if (ok) {
                         setForgotStatus("Password updated. Login now.");
-                        ui->stack->setCurrentWidget(ui->pageLogin);
+                        switchPage(ui->pageLogin, StackAnimator::Up);
                     } else {
                         setForgotStatus("Reset failed: " + payload.value("error").toString());
                     }
                 }
             });
 
-    // ✅ connect ONCE
-    QTimer::singleShot(0, this, [this](){
-        connectToServer();
-    });
-
-    // ✅ 2) Othello page/controller AFTER proto exists
+    // --- Othello page/controller ---
     othelloPage = new OthelloPage(this);
     ui->stack->addWidget(othelloPage);
     othelloController = new OthelloController(proto, othelloPage, this);
 
     connect(othelloPage, &OthelloPage::backToMenuClicked, this, [this]() {
         if (proto) proto->sendMessage("othello_leave_room", QJsonObject{});
-        ui->stack->setCurrentWidget(ui->pageMainMenu);
+        switchPage(ui->pageMainMenu, StackAnimator::Right);
     });
 
-    connect(ui->btnOthello, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(othelloPage);
+    connect(ui->btnOthello, &QPushButton::clicked, this, [this](){
+        switchPage(othelloPage, StackAnimator::Left);
     });
 
-    // ---- Navigation buttons ----
-    connect(ui->btnGoSignup, &QPushButton::clicked, this, [=](){
+    // --- Navigation buttons ---
+    connect(ui->btnGoSignup, &QPushButton::clicked, this, [this](){
         setSignupStatus("");
-        ui->stack->setCurrentWidget(ui->pageSignup);
+        switchPage(ui->pageSignup, StackAnimator::Left);
     });
 
-    connect(ui->btnBackToLogin, &QPushButton::clicked, this, [=](){
+    connect(ui->btnBackToLogin, &QPushButton::clicked, this, [this](){
         setLoginStatus("");
-        ui->stack->setCurrentWidget(ui->pageLogin);
+        switchPage(ui->pageLogin, StackAnimator::Right);
     });
 
-    connect(ui->btnForgot, &QPushButton::clicked, this, [=](){
+    connect(ui->btnForgot, &QPushButton::clicked, this, [this](){
         setForgotStatus("");
-        ui->stack->setCurrentWidget(ui->pageForgot);
+        switchPage(ui->pageForgot, StackAnimator::Down);
     });
 
-    connect(ui->btnBackToLoginFromForgot, &QPushButton::clicked, this, [=](){
+    connect(ui->btnBackToLoginFromForgot, &QPushButton::clicked, this, [this](){
         setLoginStatus("");
-        ui->stack->setCurrentWidget(ui->pageLogin);
+        switchPage(ui->pageLogin, StackAnimator::Up);
     });
 
-    connect(ui->btnLogout, &QPushButton::clicked, this, [=](){
+    connect(ui->btnLogout, &QPushButton::clicked, this, [this](){
         setLoginStatus("Logged out.");
-        ui->stack->setCurrentWidget(ui->pageLogin);
+        switchPage(ui->pageLogin, StackAnimator::Down);
     });
 
-    // ---- Actions: Signup/Login/Forgot ----
-    connect(ui->btnSignup, &QPushButton::clicked, this, [=](){
+    connect(ui->btnEditProfile, &QPushButton::clicked, this, [this](){
+        setEditProfileStatus("");
+        switchPage(ui->pageEditProfile, StackAnimator::Left);
+    });
+
+    connect(ui->btnBackToMainMenu, &QPushButton::clicked, this, [this](){
+        switchPage(ui->pageMainMenu, StackAnimator::Right);
+    });
+
+    // --- Actions ---
+    connect(ui->btnSignup, &QPushButton::clicked, this, [this](){
+        if (!proto) return;
         QJsonObject p;
         p["name"] = ui->leSignupName->text().trimmed();
         p["username"] = ui->leSignupUsername->text().trimmed();
@@ -194,14 +207,16 @@ MainWindow::MainWindow(QWidget *parent)
         proto->sendMessage("signup", p);
     });
 
-    connect(ui->btnLogin, &QPushButton::clicked, this, [=](){
+    connect(ui->btnLogin, &QPushButton::clicked, this, [this](){
+        if (!proto) return;
         QJsonObject p;
         p["username"] = ui->leLoginUsername->text().trimmed();
         p["password"] = ui->leLoginPassword->text();
         proto->sendMessage("login", p);
     });
 
-    connect(ui->btnResetPassword, &QPushButton::clicked, this, [=](){
+    connect(ui->btnResetPassword, &QPushButton::clicked, this, [this](){
+        if (!proto) return;
         QJsonObject p;
         p["username"] = ui->leForgotUsername->text().trimmed();
         p["phone"] = ui->leForgotPhone->text().trimmed();
@@ -209,16 +224,8 @@ MainWindow::MainWindow(QWidget *parent)
         proto->sendMessage("forgot_password", p);
     });
 
-    connect(ui->btnEditProfile, &QPushButton::clicked, this, [=](){
-        setEditProfileStatus("");
-        ui->stack->setCurrentWidget(ui->pageEditProfile);
-    });
-
-    connect(ui->btnBackToMainMenu, &QPushButton::clicked, this, [=](){
-        ui->stack->setCurrentWidget(ui->pageMainMenu);
-    });
-
-    connect(ui->btnSaveProfile, &QPushButton::clicked, this, [=](){
+    connect(ui->btnSaveProfile, &QPushButton::clicked, this, [this](){
+        if (!proto) return;
         if (currentUsername.isEmpty()) {
             setEditProfileStatus("Not logged in.");
             return;
@@ -230,6 +237,11 @@ MainWindow::MainWindow(QWidget *parent)
         p["newPassword"] = ui->leEditPassword->text();
         proto->sendMessage("update_profile", p);
     });
+
+    // --- connect (once) ---
+    QTimer::singleShot(0, this, [this](){
+        connectToServer();
+    });
 }
 
 MainWindow::~MainWindow()
@@ -237,36 +249,28 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-
 void MainWindow::setLoginStatus(const QString &msg)
 {
-    ui->lblLoginStatus->setText(msg);
+    if (ui) ui->lblLoginStatus->setText(msg);
 }
 
 void MainWindow::setSignupStatus(const QString &msg)
 {
-    ui->lblSignupStatus->setText(msg);
+    if (ui) ui->lblSignupStatus->setText(msg);
 }
 
 void MainWindow::setForgotStatus(const QString &msg)
 {
-    ui->lblForgotStatus->setText(msg);
+    if (ui) ui->lblForgotStatus->setText(msg);
 }
 
 void MainWindow::setEditProfileStatus(const QString &msg)
 {
-    ui->lblEditProfileStatus->setText(msg);
+    if (ui) ui->lblEditProfileStatus->setText(msg);
 }
 
 void MainWindow::connectToServer()
 {
-    // If your ClientProtocol has a safe reconnect method, call it.
-    // Otherwise, connectToHost again is usually OK after abort/disconnect.
+    if (!proto) return;
     proto->connectToHost("127.0.0.1", 45454);
-}
-
-void MainWindow::go(QWidget *w, StackAnimator::Direction dir)
-{
-    if (anim) anim->go(ui->stack, w, dir);
-    else ui->stack->setCurrentWidget(w);
 }

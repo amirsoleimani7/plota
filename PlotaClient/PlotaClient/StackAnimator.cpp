@@ -1,9 +1,11 @@
 #include "StackAnimator.h"
 
 #include <QStackedWidget>
-#include <QGraphicsOpacityEffect>
-#include <QPropertyAnimation>
+#include <QLabel>
+#include <QPixmap>
+#include <QPointer>
 #include <QParallelAnimationGroup>
+#include <QPropertyAnimation>
 #include <QEasingCurve>
 
 StackAnimator::StackAnimator(QObject *parent) : QObject(parent) {}
@@ -11,74 +13,119 @@ StackAnimator::StackAnimator(QObject *parent) : QObject(parent) {}
 void StackAnimator::go(QStackedWidget *stack, QWidget *target, Direction dir, int durationMs)
 {
     if (!stack || !target) return;
-    if (m_animating) { stack->setCurrentWidget(target); return; }
-    if (stack->currentWidget() == target) return;
 
-    QWidget *from = stack->currentWidget();
-    QWidget *to = target;
+    QWidget *current = stack->currentWidget();
+    if (current == target) return;
 
-    m_animating = true;
-
-    // Ensure target is visible for animation
-    stack->setCurrentWidget(to);
-
-    // Opacity effects
-    auto *fromEff = new QGraphicsOpacityEffect(from);
-    auto *toEff = new QGraphicsOpacityEffect(to);
-    from->setGraphicsEffect(fromEff);
-    to->setGraphicsEffect(toEff);
-    fromEff->setOpacity(1.0);
-    toEff->setOpacity(0.0);
-
-    // Slide (small distance) without fighting layouts too much
-    const QPoint basePos = to->pos();
-    QPoint offset(0, 0);
-    const int d = 18;
-    switch (dir) {
-    case Left:  offset = QPoint(d, 0); break;
-    case Right: offset = QPoint(-d, 0); break;
-    case Up:    offset = QPoint(0, d); break;
-    case Down:  offset = QPoint(0, -d); break;
-    default:    break;
+    // If running, stop safely
+    if (m_group) {
+        m_group->stop();
+        m_group->deleteLater();
+        m_group = nullptr;
     }
-    to->move(basePos + offset);
 
-    auto *fadeOut = new QPropertyAnimation(fromEff, "opacity");
-    fadeOut->setDuration(durationMs);
-    fadeOut->setStartValue(1.0);
-    fadeOut->setEndValue(0.0);
-    fadeOut->setEasingCurve(QEasingCurve::OutCubic);
+    QPointer<QWidget> from = current;
+    QPointer<QWidget> to   = target;
+    QPointer<QWidget> viewport = stack; // parent for overlays
 
-    auto *fadeIn = new QPropertyAnimation(toEff, "opacity");
-    fadeIn->setDuration(durationMs);
-    fadeIn->setStartValue(0.0);
-    fadeIn->setEndValue(1.0);
-    fadeIn->setEasingCurve(QEasingCurve::OutCubic);
+    if (!from || !to || !viewport) {
+        stack->setCurrentWidget(target);
+        return;
+    }
 
-    auto *slideIn = new QPropertyAnimation(to, "pos");
-    slideIn->setDuration(durationMs);
-    slideIn->setStartValue(basePos + offset);
-    slideIn->setEndValue(basePos);
-    slideIn->setEasingCurve(QEasingCurve::OutCubic);
+    // Render pixmaps (snapshots)
+    QPixmap fromPix(from->size());
+    fromPix.fill(Qt::transparent);
+    from->render(&fromPix);
 
-    auto *group = new QParallelAnimationGroup(stack);
-    group->addAnimation(fadeOut);
-    group->addAnimation(fadeIn);
-    if (dir != NoSlide) group->addAnimation(slideIn);
+    // Switch to target so it can render (but we'll cover with overlays)
+    stack->setCurrentWidget(to);
+    QPixmap toPix(to->size());
+    toPix.fill(Qt::transparent);
+    to->render(&toPix);
 
-    QObject::connect(group, &QParallelAnimationGroup::finished, stack, [=]() {
-        // Restore effects
-        from->setGraphicsEffect(nullptr);
-        to->setGraphicsEffect(nullptr);
-        fromEff->deleteLater();
-        toEff->deleteLater();
+    // Create overlay labels over the stacked widget
+    auto *fromShot = new QLabel(stack);
+    auto *toShot   = new QLabel(stack);
+    fromShot->setPixmap(fromPix);
+    toShot->setPixmap(toPix);
 
-        // Finalize current widget (already set, but keep it explicit)
-        stack->setCurrentWidget(to);
+    fromShot->setScaledContents(false);
+    toShot->setScaledContents(false);
 
-        m_animating = false;
-        group->deleteLater();
+    fromShot->setGeometry(stack->rect());
+    toShot->setGeometry(stack->rect());
+
+    fromShot->show();
+    toShot->show();
+    fromShot->raise();
+    toShot->raise();
+
+    // Prepare slide positions
+    const QRect base = stack->rect();
+    QRect fromEnd = base;
+    QRect toStart = base;
+
+    int dx = 0, dy = 0;
+    const int w = base.width();
+    const int h = base.height();
+
+    switch (dir) {
+    case Left:   dx = -w; dy = 0;  break;  // new page comes from right, old goes left
+    case Right:  dx =  w; dy = 0;  break;
+    case Up:     dx = 0;  dy = -h; break;
+    case Down:   dx = 0;  dy =  h; break;
+    case NoSlide:
+    default:     dx = 0;  dy = 0;  break;
+    }
+
+    // For "Left": old moves left (-w), new starts right (+w) and moves to base.
+    fromEnd = base.translated(dx, dy);
+    toStart = base.translated(-dx, -dy);
+
+    fromShot->setGeometry(base);
+    toShot->setGeometry(toStart);
+
+    // Animate geometries (safe: overlays only)
+    auto *fromMove = new QPropertyAnimation(fromShot, "geometry");
+    fromMove->setDuration(durationMs);
+    fromMove->setStartValue(base);
+    fromMove->setEndValue(fromEnd);
+    fromMove->setEasingCurve(QEasingCurve::OutCubic);
+
+    auto *toMove = new QPropertyAnimation(toShot, "geometry");
+    toMove->setDuration(durationMs);
+    toMove->setStartValue(toStart);
+    toMove->setEndValue(base);
+    toMove->setEasingCurve(QEasingCurve::OutCubic);
+
+    // Fade in the new overlay slightly (optional but nice)
+    // We'll use windowOpacity property of QLabel (works on QWidget)
+    toShot->setWindowOpacity(0.0);
+
+    auto *toFade = new QPropertyAnimation(toShot, "windowOpacity");
+    toFade->setDuration(durationMs);
+    toFade->setStartValue(0.0);
+    toFade->setEndValue(1.0);
+    toFade->setEasingCurve(QEasingCurve::OutCubic);
+
+    m_group = new QParallelAnimationGroup(stack);
+    if (dir != NoSlide) {
+        m_group->addAnimation(fromMove);
+        m_group->addAnimation(toMove);
+    }
+    m_group->addAnimation(toFade);
+
+    QObject::connect(m_group, &QParallelAnimationGroup::finished, stack, [this, fromShot, toShot]() {
+        // Clean overlays
+        fromShot->deleteLater();
+        toShot->deleteLater();
+
+        if (m_group) {
+            m_group->deleteLater();
+            m_group = nullptr;
+        }
     });
 
-    group->start();
+    m_group->start();
 }

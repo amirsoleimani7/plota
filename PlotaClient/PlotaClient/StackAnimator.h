@@ -2,6 +2,7 @@
 #include <QObject>
 
 class QStackedWidget;
+class QParallelAnimationGroup;
 
 class StackAnimator : public QObject
 {
@@ -11,10 +12,11 @@ public:
 
     explicit StackAnimator(QObject *parent = nullptr);
 
-    void go(QStackedWidget *stack, QWidget *target,
-            Direction dir = NoSlide,
+    void go(QStackedWidget *stack,
+            QWidget *target,
+            Direction dir = Left,
             int durationMs = 220);
 
 private:
-    bool m_animating = false;
+    QParallelAnimationGroup *m_group = nullptr;
 };
