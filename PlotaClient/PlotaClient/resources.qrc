@@ -2,4 +2,11 @@
     <qresource prefix="/style">
         <file>assets/style.qss</file>
     </qresource>
+    <qresource prefix="/a"/>
+    <qresource prefix="/">
+        <file>assets/plota-logo.png</file>
+        <file>assets/checkers-logo.png</file>
+        <file>assets/connect4-logo.png</file>
+        <file>assets/othello-logo.png</file>
+    </qresource>
 </RCC>

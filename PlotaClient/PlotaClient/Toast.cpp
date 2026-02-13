@@ -66,7 +66,6 @@ Toast::Toast(QWidget *parent) : QWidget(parent)
     connect(m_fadeOut, &QPropertyAnimation::finished, this, &Toast::deleteLater);
 }
 
-
 void Toast::setKind(Kind kind)
 {
     QColor bg("#e5e7eb"); // info

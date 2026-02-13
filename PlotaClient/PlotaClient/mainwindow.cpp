@@ -14,7 +14,15 @@
 #include <QTimer>
 #include <QLineEdit>
 #include <QDebug>
+#include <QIcon>
+#include <QPixmap>
 
+#include "GameCardWidget.h"
+#include <QVBoxLayout>
+
+// ----------------------------
+// Animation page switching
+// ----------------------------
 void MainWindow::switchPage(QWidget *page, int dir, int ms)
 {
     if (!ui || !ui->stack || !page) return;
@@ -26,7 +34,9 @@ void MainWindow::switchPage(QWidget *page, int dir, int ms)
     }
 }
 
-// Small helper: show toast only for non-empty messages
+// ----------------------------
+// Toast helper
+// ----------------------------
 static void alarmToast(QWidget *parent, const QString &msg, Toast::Kind kind, int ms = 2500)
 {
     const QString t = msg.trimmed();
@@ -56,10 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(connectionPage, &ConnectionPage::retryClicked, this, [this](){
         if (!connectionPage) return;
         connectionPage->setConnecting("127.0.0.1:45454");
-
-        // toast (optional)
         alarmToast(this, "Reconnecting…", Toast::Info, 1200);
-
         connectToServer();
     });
 
@@ -74,6 +81,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->leSignupPassword->setEchoMode(QLineEdit::Password);
     ui->leForgotNewPassword->setEchoMode(QLineEdit::Password);
 
+    // keep the old connect4 button disabled (even though we won't show it on menu)
     ui->btnConnect4->setEnabled(false);
     ui->btnConnect4->setText("connect4 (coming soon)");
 
@@ -82,18 +90,41 @@ MainWindow::MainWindow(QWidget *parent)
     setForgotStatus("");
     setEditProfileStatus("");
 
+    // ----------------------------
+    // ✅ Resource icons (from resources.qrc)
+    // ----------------------------
+    {
+        const int w = qMax(320, int(this->width() * 0.40));
+        ui->btnOthello->setMinimumWidth(w);
+        ui->btnConnect4->setMinimumWidth(w);
+        ui->btnEditProfile->setMinimumWidth(w);
+        ui->btnLogout->setMinimumWidth(w);
+
+        ui->btnOthello->setMinimumHeight(64);
+        ui->btnConnect4->setMinimumHeight(64);
+        ui->btnEditProfile->setMinimumHeight(64);
+        ui->btnLogout->setMinimumHeight(52);
+
+        ui->btnOthello->setIcon(QIcon(":/assets/othello-logo.png"));
+        ui->btnConnect4->setIcon(QIcon(":/assets/connect4-logo.png"));
+        // ui->btnEditProfile->setIcon(QIcon(":/assets/checkers-logo.png"));
+
+        const QSize iconSz(34, 34);
+        ui->btnOthello->setIconSize(iconSz);
+        ui->btnConnect4->setIconSize(iconSz);
+        ui->btnEditProfile->setIconSize(iconSz);
+    }
+
     // --- Protocol signals ---
     connect(proto, &ClientProtocol::connected, this, [this](){
         everConnected = true;
         setLoginStatus("Connected.");
-        // Connection -> Login (animate)
         switchPage(ui->pageLogin, StackAnimator::Down);
     });
 
     connect(proto, &ClientProtocol::disconnected, this, [this](){
         setLoginStatus("Disconnected.");
         if (connectionPage) connectionPage->setFailed("Disconnected from server.");
-        // Any page -> Connection (animate)
         switchPage(connectionPage, StackAnimator::Up);
     });
 
@@ -173,9 +204,67 @@ MainWindow::MainWindow(QWidget *parent)
         switchPage(ui->pageMainMenu, StackAnimator::Right);
     });
 
-    connect(ui->btnOthello, &QPushButton::clicked, this, [this](){
-        switchPage(othelloPage, StackAnimator::Left);
-    });
+    // ----------------------------
+    // ✅ Main menu: 3 cards (Othello, Connect4, Checkers)
+    // ✅ Keep EditProfile + Logout as normal buttons
+    // ----------------------------
+    {
+        // Cards replace these buttons:
+        ui->btnOthello->hide();
+        ui->btnConnect4->hide();
+
+        // Keep these as normal buttons:
+        ui->btnEditProfile->show();
+        ui->btnLogout->show();
+
+        // Create / reuse layout on pageMainMenu
+        QLayout *existing = ui->pageMainMenu->layout();
+        QVBoxLayout *menuLay = qobject_cast<QVBoxLayout*>(existing);
+
+        if (!menuLay) {
+            menuLay = new QVBoxLayout(ui->pageMainMenu);
+            menuLay->setContentsMargins(0, 0, 0, 0);
+        }
+
+        // If designer already had items in this layout, you may see duplicates.
+        // This code assumes pageMainMenu is mostly empty except buttons.
+        menuLay->setAlignment(Qt::AlignCenter);
+        menuLay->setSpacing(18);
+
+        // Card 1: Othello (clickable)
+        auto *cardOthello = new GameCardWidget(ui->pageMainMenu);
+        cardOthello->setImage(":/assets/othello-logo.png");
+        cardOthello->setTitle("Othello");
+        cardOthello->setSubtitle("Play Othello online against others.");
+        menuLay->addWidget(cardOthello);
+
+        connect(cardOthello, &GameCardWidget::clicked, this, [this](){
+            switchPage(othelloPage, StackAnimator::Left);
+        });
+
+        // Card 2: Connect 4 (coming soon)
+        auto *cardConnect4 = new GameCardWidget(ui->pageMainMenu);
+        cardConnect4->setImage(":/assets/connect4-logo.png");
+        cardConnect4->setTitle("Connect 4");
+        cardConnect4->setSubtitle("Coming soon...");
+        cardConnect4->setEnabled(false);
+        menuLay->addWidget(cardConnect4);
+
+        // Card 3: Checkers (coming soon)
+        auto *cardCheckers = new GameCardWidget(ui->pageMainMenu);
+        cardCheckers->setImage(":/assets/checkers-logo.png");
+        cardCheckers->setTitle("Checkers");
+        cardCheckers->setSubtitle("Coming soon...");
+        cardCheckers->setEnabled(false);
+        menuLay->addWidget(cardCheckers);
+
+        // Put normal buttons below cards (same width feel)
+        ui->btnEditProfile->setMinimumWidth(320);
+        ui->btnLogout->setMinimumWidth(320);
+
+        menuLay->addWidget(ui->btnEditProfile);
+        menuLay->addWidget(ui->btnLogout);
+    }
 
     // --- Navigation buttons ---
     connect(ui->btnGoSignup, &QPushButton::clicked, this, [this](){
@@ -260,6 +349,7 @@ MainWindow::MainWindow(QWidget *parent)
         connectToServer();
     });
 
+    // Button click fx
     const auto buttons = this->findChildren<QPushButton*>();
     for (auto *b : buttons) ButtonFx::install(b);
 }
@@ -269,6 +359,9 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+// ----------------------------
+// Status -> Toast mapping (same as your logic)
+// ----------------------------
 void MainWindow::setLoginStatus(const QString &msg)
 {
     if (ui) ui->lblLoginStatus->setText(msg);

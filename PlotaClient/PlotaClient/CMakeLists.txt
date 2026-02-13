@@ -40,6 +40,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ButtonFx.cpp
         Toast.h
         Toast.cpp
+        GameCardWidget.h
+        GameCardWidget.cpp
 
 
 

@@ -93,3 +93,40 @@ QWidget:not(#toast) {
     color: #e8e8e8;
 }
 
+
+/* --- Game Card --- */
+#GameCard {
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,18);
+    background: rgba(18, 24, 38, 0.92);
+}
+
+#GameCard[hover="true"] {
+    border: 1px solid rgba(255,255,255,35);
+    background: rgba(22, 30, 48, 0.96);
+}
+
+#GameCardImage {
+    background: #0f1115;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+}
+
+#GameCardBody {
+    background: rgba(0,0,0,0.20);
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+}
+
+#GameCardTitle {
+    font-size: 22px;
+    font-weight: 800;
+    color: #f1f5f9;
+}
+
+#GameCardSubtitle {
+    font-size: 13px;
+    color: rgba(241,245,249,0.72);
+}
+
+
