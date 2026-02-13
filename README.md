@@ -32,7 +32,7 @@ Plota is a full-stack application featuring an **online Othello (Reversi) game**
 
 | Login | Main Menu | Online Game + Chat |
 |------|-----------|--------------------|
-| ![Login](plota/ScreenShots/login-page.png) | ![Main Menu](plota/ScreenShots/main-menu.png) | ![Online Othello Chat](plota/ScreenShots/online-othello-chat.png) |
+| ![Login](ScreenShots/login-page.png) | ![Main Menu](ScreenShots/main-menu.png) | ![Online Othello Chat](ScreenShots/online-othello-chat.png) |
 
 ---
 
