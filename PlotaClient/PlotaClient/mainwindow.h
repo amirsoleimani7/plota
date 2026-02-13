@@ -7,9 +7,12 @@
 #include <QJsonDocument>
 
 #include "ClientProtocol.h"
+#include "StackAnimator.h"
 
 class OthelloPage;
 class OthelloController;
+class ConnectionPage;
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -41,6 +44,14 @@ private:
     void setLoginStatus(const QString &msg);
     void setSignupStatus(const QString &msg);
     void setForgotStatus(const QString &msg);
+
+    ConnectionPage *connectionPage = nullptr;
+    StackAnimator *anim = nullptr;
+
+    bool everConnected = false;
+    void go(QWidget *w, StackAnimator::Direction dir = StackAnimator::NoSlide);
+    void connectToServer();
+
 
 
 };

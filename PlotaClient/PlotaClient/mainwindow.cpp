@@ -3,6 +3,11 @@
 #include "OthelloPage.h"
 #include "OthelloController.h"
 
+#include "ConnectionPage.h"
+#include "StackAnimator.h"
+#include <QTimer>
+
+
 #include <QLineEdit>
 #include <QDebug>
 
@@ -11,6 +16,31 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    anim = new StackAnimator(this);
+
+    // Add connection page dynamically (no .ui changes required)
+    connectionPage = new ConnectionPage(this);
+    ui->stack->insertWidget(0, connectionPage);
+
+    // Show connection page first
+    ui->stack->setCurrentWidget(connectionPage);
+    connectionPage->setConnecting("127.0.0.1:45454");
+
+    // Create protocol once (as you already do)
+    proto = new ClientProtocol(this);
+
+    // retry button
+    connect(connectionPage, &ConnectionPage::retryClicked, this, [this](){
+        connectionPage->setConnecting("127.0.0.1:45454");
+        connectToServer();
+    });
+
+    // Helper for animated navigation
+    auto goTo = [this](QWidget *w, StackAnimator::Direction dir = StackAnimator::NoSlide){
+        if (anim) anim->go(ui->stack, w, dir);
+        else ui->stack->setCurrentWidget(w);
+    };
+
 
     // ---- UI init ----
     ui->stack->setCurrentWidget(ui->pageLogin);
@@ -31,20 +61,24 @@ MainWindow::MainWindow(QWidget *parent)
     proto = new ClientProtocol(this);
 
     connect(proto, &ClientProtocol::connected, this, [=](){
-        qDebug() << "Connected to server!";
+        everConnected = true;
         setLoginStatus("Connected.");
+        // Move to login screen once connected
+        goTo(ui->pageLogin, StackAnimator::Up);
     });
 
     connect(proto, &ClientProtocol::disconnected, this, [=](){
-        qDebug() << "Disconnected from server!";
         setLoginStatus("Disconnected.");
+        // If we lose connection at any time, show retry page
+        connectionPage->setFailed("Disconnected from server.");
+        goTo(connectionPage, StackAnimator::Down);
     });
 
     connect(proto, &ClientProtocol::socketError, this, [=](const QString &e){
-        qDebug() << "Socket error:" << e;
         setLoginStatus("Socket error: " + e);
+        connectionPage->setFailed("Socket error:\n" + e);
+        goTo(connectionPage, StackAnimator::Down);
     });
-
     connect(proto, &ClientProtocol::badMessageReceived, this, [=](const QByteArray &line){
         qDebug() << "Bad JSON from server:" << line;
     });
@@ -105,7 +139,9 @@ MainWindow::MainWindow(QWidget *parent)
             });
 
     // ✅ connect ONCE
-    proto->connectToHost("127.0.0.1", 45454);
+    QTimer::singleShot(0, this, [this](){
+        connectToServer();
+    });
 
     // ✅ 2) Othello page/controller AFTER proto exists
     othelloPage = new OthelloPage(this);
@@ -220,4 +256,17 @@ void MainWindow::setForgotStatus(const QString &msg)
 void MainWindow::setEditProfileStatus(const QString &msg)
 {
     ui->lblEditProfileStatus->setText(msg);
+}
+
+void MainWindow::connectToServer()
+{
+    // If your ClientProtocol has a safe reconnect method, call it.
+    // Otherwise, connectToHost again is usually OK after abort/disconnect.
+    proto->connectToHost("127.0.0.1", 45454);
+}
+
+void MainWindow::go(QWidget *w, StackAnimator::Direction dir)
+{
+    if (anim) anim->go(ui->stack, w, dir);
+    else ui->stack->setCurrentWidget(w);
 }

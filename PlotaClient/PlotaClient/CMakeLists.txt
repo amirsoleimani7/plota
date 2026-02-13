@@ -31,6 +31,11 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         OthelloController.cpp
         OthelloBoardWidget.h
         OthelloBoardWidget.cpp
+        StackAnimator.h
+        StackAnimator.cpp
+        ConnectionPage.h
+        ConnectionPage.cpp
+        resources.qrc
 
 
 
