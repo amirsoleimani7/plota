@@ -18,7 +18,7 @@
     <item>
      <widget class="QStackedWidget" name="stack">
       <property name="currentIndex">
-       <number>0</number>
+       <number>3</number>
       </property>
       <widget class="QWidget" name="pageLogin">
        <layout class="QVBoxLayout" name="verticalLayout">
@@ -192,7 +192,7 @@
              <item row="0" column="0">
               <widget class="QLabel" name="leSignupName_label">
                <property name="text">
-                <string>Nam :</string>
+                <string>Name :</string>
                </property>
               </widget>
              </item>
@@ -347,7 +347,7 @@
              <item row="1" column="0">
               <widget class="QLabel" name="leForgotPhone_label">
                <property name="text">
-                <string>Phone Numbner</string>
+                <string>Phone Number</string>
                </property>
               </widget>
              </item>
@@ -463,7 +463,14 @@
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="QLineEdit" name="leEditUsername"/>
+              <widget class="QLineEdit" name="leEditUsername">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="readOnly">
+                <bool>true</bool>
+               </property>
+              </widget>
              </item>
              <item row="1" column="0">
               <widget class="QLabel" name="leEditName_label">
